@@ -35,8 +35,14 @@
   #define AUX5_PIN              DAC_PIN(A14)     // true analog output
 #endif
 
-#define AUX6_PIN                 8  //
-#define AUX7_PIN                29  //
+#define AUX6_PIN                 8  // LED3_N
+#define AUX7_PIN                29  // LED4_P
+
+#define AUX8_PIN                33  // FOC_IN
+#define AUX9_PIN                32  // FOC_OUT  (PWM)
+
+
+
 
 // Misc. pins
 #ifndef ONE_WIRE_PIN
@@ -54,11 +60,11 @@
 #define PEC_SENSE_PIN           2//23            // PEC Sense, analog or digital
 
 // The status LED is a two wire jumper with a 10k resistor in series to limit the current to the LED
-#define STATUS_LED_PIN          AUX0_PIN//5      // Default LED Cathode (-)
-#define MOUNT_LED_PIN           AUX4_PIN//7      // Default LED Cathode (-)
+#define STATUS_LED_PIN          AUX4_PIN//7      // Default LED Cathode (-)
+#define MOUNT_LED_PIN           AUX6_PIN//8      // Default LED Cathode (-)
 
 #ifndef RETICLE_LED_PIN 
-  #define RETICLE_LED_PIN       AUX6_PIN//8      // Default LED Cathode (-)
+  #define RETICLE_LED_PIN       AUX0_PIN//8      // Default LED Cathode (-)
 #endif
 
 // For a piezo buzzer
