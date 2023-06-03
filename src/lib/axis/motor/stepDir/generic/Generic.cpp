@@ -18,6 +18,15 @@ void StepDirGeneric::init(float param1, float param2, float param3, float param4
 
   m0Pin = Pins->m0;
   m1Pin = Pins->m1;
+
+  //-------------------------------------------------------
+  //2023-5-20   Leo
+  // release the /RST of step motor driver pin
+  pinModeEx(Pins->m3, OUTPUT);
+  digitalWriteEx(Pins->m3, HIGH);
+  //-------------------------------------------------------
+
+
   if (isDecayOnM2()) { decayPin = Pins->m2; m2Pin = OFF; } else { decayPin = Pins->decay; m2Pin = Pins->m2; }
   pinModeEx(decayPin, OUTPUT);
   digitalWriteEx(decayPin, getDecayPinState(settings.decay));

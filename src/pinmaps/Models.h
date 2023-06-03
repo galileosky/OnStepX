@@ -72,6 +72,12 @@
   #include "Pins.MaxSTM.h"
 #endif
 
+#if PINMAP == PerseusPro
+  #define PINMAP_STR "PerseusPro v1.0"
+  #include "Pins.PerseusPro.h"
+#endif
+
+
 // all unassigned pins OFF
 #include "../pinmaps/Pins.defaults.h"
 
