@@ -76,6 +76,9 @@ class ServoMotor : public Motor {
     // set slewing state (hint that we are about to slew or are done slewing)
     void setSlewing(bool state);
 
+    // get encoder count
+    int32_t getEncoderCount() { return encoder->count; }
+
     // updates PID and sets servo motor power/direction
     void poll();
 
@@ -127,6 +130,7 @@ class ServoMotor : public Motor {
     bool motorStepsInitDone = false;
     bool homeSet = false;
     bool encoderReverse = false;
+    bool encoderReverseDefault = false;
     bool wasAbove33 = false;
     bool wasBelow33 = false;
     long lastTargetDistance = 0;
