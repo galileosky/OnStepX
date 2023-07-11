@@ -77,6 +77,12 @@
   #include "Pins.PerseusPro.h"
 #endif
 
+#if PINMAP == OnStepAP
+  #define PINMAP_STR "OnStepAP"
+  #include "Pins.OnStepAP.h"
+#endif
+
+
 
 // all unassigned pins OFF
 #include "../pinmaps/Pins.defaults.h"

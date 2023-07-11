@@ -33,9 +33,10 @@
 #define STM32Blue                   18     // Khalid and Dave's PCB for STM32 Blue pill (STM32F103CB and STM32F303CC)
 
 #define PerseusPro                  19     // EastGlory PerseusPro GoTo controller      Leo 2023-5-17
+#define OnStepAP                    20     // GalileoSky OnStepAP GoTo controller       Leo 2023-7-9
 
 
-#define PINMAP_LAST                 19
+#define PINMAP_LAST                 20
 
 // WEATHER sensors (temperature, pressure, and humidity)
 #define WEATHER_FIRST               1
