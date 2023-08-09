@@ -5,7 +5,8 @@
 
 #ifdef SERVO_MOTOR_PRESENT
 
-#include "../../../encoder/as37h39bb/As37h39bb.h"
+#include "../../../encoder/bissc/As37h39bb.h"
+#include "../../../encoder/bissc/Jtw24.h"
 #include "../../../encoder/cwCcw/CwCcw.h"
 #include "../../../encoder/pulseDir/PulseDir.h"
 #include "../../../encoder/pulseOnly/PulseOnly.h"
@@ -15,11 +16,12 @@
 
 #include "dc/Dc.h"
 #include "tmc2209/Tmc2209.h"
+#include "tmc5160/Tmc5160.h"
 
 #include "feedback/Pid/Pid.h"
 
-#ifndef ANALOG_WRITE_RANGE
-  #define ANALOG_WRITE_RANGE 255
+#ifndef SERVO_SLEW_DIRECT
+  #define SERVO_SLEW_DIRECT OFF
 #endif
 
 #ifndef SERVO_SLEWING_TO_TRACKING_DELAY
@@ -85,10 +87,10 @@ class ServoMotor : public Motor {
     // sets dir as required and moves coord toward target at setFrequencySteps() rate
     void move();
     
-    // calibrate the motor if required
-    void calibrate() { driver->calibrate(); }
+    // calibrate the motor driver
+    void calibrateDriver() { driver->calibrateDriver(); }
 
-    inline int32_t encoderRead() { return encoderReverse ? -encoder->read() : encoder->read(); }
+    int32_t encoderRead();
 
     // servo motor driver
     ServoDriver *driver;
@@ -100,8 +102,14 @@ class ServoMotor : public Motor {
     long delta = 0;
 
   private:
+    float velocityEstimate = 0.0F;
+    float velocityOverride = 0.0F;
+
+    long encoderApplyFilter(long encoderCounts);
+
     uint8_t servoMonitorHandle = 0;
     uint8_t taskHandle = 0;
+    float maxFrequency = HAL_FRACTIONAL_SEC; // fastest timer rate
 
     int  stepSize = 1;                  // step size
     volatile int  homeSteps = 1;        // step count for microstep sequence between home positions (driver indexer)

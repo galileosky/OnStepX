@@ -350,7 +350,10 @@ CommandError Goto::alignAddStar() {
 
     #if ALIGN_MAX_NUM_STARS > 1
       e = transform.align.addStar(alignState.currentStar, alignState.lastStar, &lastAlignTarget, &mountPosition);
+    #else
+      UNUSED(mountPosition);
     #endif
+
     if (e == CE_NONE) alignState.currentStar++;
   }
 
@@ -536,7 +539,7 @@ void Goto::poll() {
   }
 }
 
-// start slews with approach correction and parking support
+// start slews with approach correction and parking/homing support
 CommandError Goto::startAutoSlew() {
   CommandError e;
 
