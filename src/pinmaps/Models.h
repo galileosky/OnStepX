@@ -82,6 +82,12 @@
   #include "Pins.OnStepAP.h"
 #endif
 
+#if PINMAP == PerseusMini
+  //Sames as OnStepAP
+  #define PINMAP_STR "PerseusMini"
+  #include "Pins.PerseusMini.h"
+#endif
+
 
 
 // all unassigned pins OFF

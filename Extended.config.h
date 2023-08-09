@@ -35,7 +35,7 @@
 
 // ESP32 VIRTUAL SERIAL BLUETOOTH AND IP COMMAND CHANNELS --------------------------------------------------------------------------
 #define SERIAL_BT_MODE              SLAVE //OFF //    OFF, Use SLAVE to enable the interface (ESP32 only.)                          Option
-#define SERIAL_BT_NAME         "OnStepAP" //         "OnStepX", Bluetooth device name.                                        Adjust
+#define SERIAL_BT_NAME      "PerseusMini" //"OnStepAP" //         "OnStepX", Bluetooth device name.                                        Adjust
 #define SERIAL_IP_MODE                OFF //    OFF, WIFI_ACCESS_POINT or WIFI_STATION enables interface (ESP32 only.)        Option
 #define WEB_SERVER                    OFF //    OFF, ON enables Webserver (for Website plugin)                                Option
 
