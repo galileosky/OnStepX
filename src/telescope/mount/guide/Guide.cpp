@@ -300,17 +300,17 @@ bool Guide::validAxis2(GuideAction guideAction) {
 
   if (guideAction == GA_REVERSE || guideAction == GA_SPIRAL) {
     if (pierSide == PIER_SIDE_WEST) {
-      if (location.a2 > axis2.settings.limits.max) return false;
+      if (fgt(location.a2, axis2.settings.limits.max)) return false;
     } else {
-      if (location.a2 < axis2.settings.limits.min) return false;
+      if (flt(location.a2, axis2.settings.limits.min)) return false;
     }
   }
 
   if (guideAction == GA_FORWARD || guideAction == GA_SPIRAL) {
     if (pierSide == PIER_SIDE_WEST) {
-      if (location.a2 < axis2.settings.limits.min) return false;
+      if (flt(location.a2, axis2.settings.limits.min)) return false;
     } else {
-      if (location.a2 > axis2.settings.limits.max) return false;
+      if (fgt(location.a2, axis2.settings.limits.max)) return false;
     }
   }
   if (guideAction == GA_SPIRAL) {
@@ -452,10 +452,12 @@ void Guide::poll() {
 }
 
 // enables or disables backlash for the GUIDE_DISABLE_BACKLASH option
-void Guide::backlashEnableControl(bool enabled) {
+void Guide::backlashEnableControl(bool enable) {
   #if GUIDE_DISABLE_BACKLASH == ON
-    axis1.setBacklash(state ? mount.settings.backlash.axis1 : 0.0F);
-    axis2.setBacklash(state ? mount.settings.backlash.axis2 : 0.0F);
+    axis1.setBacklash(enable ? mount.settings.backlash.axis1 : 0.0F);
+    axis2.setBacklash(enable ? mount.settings.backlash.axis2 : 0.0F);
+  #else
+    UNUSED(enable);
   #endif
 }
 
