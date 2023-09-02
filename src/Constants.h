@@ -37,8 +37,14 @@
 
 
 #define PerseusPro                  20     // EastGlory PerseusPro GoTo controller      Leo 2023-5-17
+#define OnStepAP                    21     // GalileoSky OnStepAP GoTo controller       Leo 2023-7-9
+#define PerseusMini                 22     // GalileoSky PerseusMini GoTo controller    Leo 2023-8-9
 
-#define PINMAP_LAST                 20
+
+#define PINMAP_LAST                 22
+
+
+
 
 // WEATHER sensors (temperature, pressure, and humidity)
 #define WEATHER_FIRST               1
