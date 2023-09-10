@@ -76,6 +76,66 @@
   #include "Pins.MaxSTM.h"
 #endif
 
+
+//-------------------------------------
+//Dummy settings
+//
+//-------------------------------------
+#if PINMAP == PerseusDummy1
+  #define PINMAP_STR "PerseusDummy"
+  #include "Pins.PerseusDymmy.h"
+#endif
+
+#if PINMAP == PerseusDummy2
+  #define PINMAP_STR "PerseusDummy"
+  #include "Pins.PerseusDymmy.h"
+#endif
+
+#if PINMAP == PerseusDummy3
+  #define PINMAP_STR "PerseusDummy"
+  #include "Pins.PerseusDymmy.h"
+#endif
+
+#if PINMAP == PerseusDummy4
+  #define PINMAP_STR "PerseusDummy"
+  #include "Pins.PerseusDymmy.h"
+#endif
+
+#if PINMAP == PerseusDummy5
+  #define PINMAP_STR "PerseusDummy"
+  #include "Pins.PerseusDymmy.h"
+#endif
+
+#if PINMAP == PerseusDummy6
+  #define PINMAP_STR "PerseusDummy"
+  #include "Pins.PerseusDymmy.h"
+#endif
+
+#if PINMAP == PerseusDummy7
+  #define PINMAP_STR "PerseusDummy"
+  #include "Pins.PerseusDymmy.h"
+#endif
+
+#if PINMAP == PerseusDummy8
+  #define PINMAP_STR "PerseusDummy"
+  #include "Pins.PerseusDymmy.h"
+#endif
+
+#if PINMAP == PerseusDummy9
+  #define PINMAP_STR "PerseusDummy"
+  #include "Pins.PerseusDymmy.h"
+#endif
+
+#if PINMAP == PerseusDummy10
+  #define PINMAP_STR "PerseusDummy"
+  #include "Pins.PerseusDymmy.h"
+#endif
+
+
+//-------------------------------------
+//Perseus series of GalileoSky
+//
+//-------------------------------------
 #if PINMAP == PerseusPro
   #define PINMAP_STR "PerseusPro v1.0"
   #include "Pins.PerseusPro.h"
@@ -86,6 +146,27 @@
   #include "Pins.OnStepAP.h"
 #endif
 
+
+#if PINMAP == PerseusMax
+  #define PINMAP_STR "PerseusMax"
+  #include "Pins.PerseusMax.h"
+#endif
+
+#if PINMAP == PerseusMini
+  #define PINMAP_STR "PerseusMini"
+  #include "Pins.PerseusMini.h"
+#endif
+
+#if PINMAP == PerseusMicro
+  #define PINMAP_STR "PerseusMicro"
+  #include "Pins.PerseusMicro.h"
+#endif
+
+
+#if PINMAP == PerseusNano
+  #define PINMAP_STR "PerseusNano"
+  #include "Pins.PerseusNano.h"
+#endif
 
 
 // all unassigned pins OFF

@@ -34,12 +34,27 @@
 
 #define JTWSTM                      19     // JTW Astronomy PCB rev 2.1
 
-#define PerseusPro                  20     // EastGlory PerseusPro GoTo controller      Leo 2023-5-17
-#define OnStepAP                    21     // GalileoSky OnStepAP GoTo controller       Leo 2023-7-9
-#define PerseusMini                 22     // GalileoSky PerseusMini GoTo controller    Leo 2023-9-2
+#define PerseusDummy1               20     // Dummy for future official supported board expansion, keep Perseuse series IDs fixed
+#define PerseusDummy2               21     // 
+#define PerseusDummy3               22     // 
+#define PerseusDummy4               23     // 
+#define PerseusDummy5               24     // 
+#define PerseusDummy6               25     // 
+#define PerseusDummy7               26     // 
+#define PerseusDummy8               27     // 
+#define PerseusDummy9               28     // 
+#define PerseusDummy10              29     // 
+
+//Perseus series by GalileoSky
+#define PerseusPro                  30     // 
+#define OnStepAP                    31     // 
+#define PerseusMax                  32     // 
+#define PerseusMini                 33     // 
+#define PerseusMicro                34     // 
+#define PerseusNano                 35     // 
 
 
-#define PINMAP_LAST                 22
+#define PINMAP_LAST                 35
 
 
 
