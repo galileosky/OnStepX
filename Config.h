@@ -31,8 +31,8 @@
 #define STATUS_LED                     ON //    OFF, Steady illumination if no error, blinks w/error code otherwise.          Option
 
 // RETICLE CONTROL ------------------------------- see https://onstep.groups.io/g/main/wiki/Configuration_Controller#RETICLE_CONTROL
-#define RETICLE_LED_DEFAULT           OFF //    OFF, n. Where n=0..255 (0..100%) activates feature sets default brightness.   Option
-#define RETICLE_LED_MEMORY            OFF //    OFF, ON Remember reticle brightness across power cycles.                      Option
+#define RETICLE_LED_DEFAULT           126 //OFF    OFF, n. Where n=0..255 (0..100%) activates feature sets default brightness.   Option
+#define RETICLE_LED_MEMORY             ON //OFF    OFF, ON Remember reticle brightness across power cycles.                      Option
 
 // WEATHER SENSOR --------------------------------- see https://onstep.groups.io/g/main/wiki/Configuration_Controller#WEATHER_SENSOR
 #define WEATHER                       OFF //    OFF, BME280 (I2C 0x77,) BME280_0x76, BME280_SPI (see pinmap for CS.)          Option
@@ -155,7 +155,7 @@
 #define ST4_HAND_CONTROL_FOCUSER       ON //     ON, ON alternate to above: Focuser move [E]f1 [W]f2 [N]-     [S]+            Option
 
 // GUIDING BEHAVIOUR ------------------------------------------ see https://onstep.groups.io/g/main/wiki/Configuration_Mount#GUIDING
-#define GUIDE_TIME_LIMIT               10 //     10, n. Time limit n=0..120 seconds. Use 0 to disable.                        Adjust
+#define GUIDE_TIME_LIMIT                0 //10 //     10, n. Time limit n=0..120 seconds. Use 0 to disable.                        Adjust
 #define GUIDE_DISABLE_BACKLASH        OFF //    OFF, Disable backlash takeup during guiding at <= 1X.                         Option
 
 // LIMITS ------------------------------------------------------ see https://onstep.groups.io/g/main/wiki/Configuration_Mount#LIMITS
