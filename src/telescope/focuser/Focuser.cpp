@@ -159,7 +159,7 @@ void Focuser::init() {
 
 void Focuser::begin() {
   for (int index = 0; index < FOCUSER_MAX; index++) {
-    if (configuration[index].present && axes[index] != NULL) axes[index]->calibrate();
+    if (configuration[index].present && axes[index] != NULL) axes[index]->calibrateDriver();
   }
 
   // start task for temperature compensated focusing
@@ -217,6 +217,7 @@ bool Focuser::setDcPower(int index, int value) {
 // get TCF enable
 bool Focuser::getTcfEnable(int index) {
   if (index < 0 || index >= FOCUSER_MAX) return false;
+  if (isnan(getTemperature())) setTcfEnable(index, false);
   return settings[index].tcf.enabled;
 }
 
@@ -225,6 +226,7 @@ CommandError Focuser::setTcfEnable(int index, bool value) {
   if (index < 0 || index >= FOCUSER_MAX) return CE_CMD_UNKNOWN;
   if (settings[index].parkState >= PS_PARKED) return CE_PARKED;
 
+  if (isnan(getTemperature())) value = false;
   settings[index].tcf.enabled = value;
   if (value) {
     settings[index].tcf.t0 = getTemperature();
@@ -351,11 +353,14 @@ CommandError Focuser::gotoTarget(int index, long target) {
   if (settings[index].parkState >= PS_PARKED) return CE_PARKED;
 
   VF("MSG: Focuser"); V(index + 1); VF(", goto target coordinate set ("); V(target/axes[index]->getStepsPerMeasure()); VLF("um)");
-  VF("MSG: Focuser"); V(index + 1); VLF(", starting goto");
+  VF("MSG: Focuser"); V(index + 1); VLF(", attempting goto");
 
   axes[index]->setFrequencyBase(0.0F);
   axes[index]->setTargetCoordinateSteps(target + tcfSteps[index]);
-  return axes[index]->autoGoto(settings[index].gotoRate);
+  CommandError e = axes[index]->autoGoto(settings[index].gotoRate);
+  if (e != CE_NONE) { VF("MSG: Focuser"); V(index + 1); VLF(", goto failed"); }
+
+  return e; 
 }
 
 // park focuser at its current location

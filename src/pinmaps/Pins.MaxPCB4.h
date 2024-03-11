@@ -28,7 +28,7 @@
 #endif
 
 // Use the following settings for the 4x TMC UART drivers
-#ifdef STEP_DIR_TMC_UART_PRESENT
+#if defined(STEP_DIR_TMC_UART_PRESENT) || defined(SERVO_TMC2209_PRESENT)
   #define SERIAL_TMC_HARDWARE_UART
   #define DRIVER_TMC_STEPPER
   #define SERIAL_TMC            Serial8            // Use a single hardware serial port to up to four drivers
@@ -65,7 +65,9 @@
 #endif
 
 // For a piezo buzzer
-#define STATUS_BUZZER_PIN       17               // Tone
+#ifndef STATUS_BUZZER_PIN 
+  #define STATUS_BUZZER_PIN     17               // Tone
+#endif
 
 // The PPS pin is a 3.3V logic input, OnStep measures time between rising edges and adjusts the internal sidereal clock frequency
 #ifndef PPS_SENSE_PIN
@@ -91,8 +93,6 @@
 #ifndef AXIS1_SENSE_HOME_PIN
   #define AXIS1_SENSE_HOME_PIN  AUX3_PIN
 #endif
-#define AXIS1_SERVO_PH1_PIN     AXIS1_DIR_PIN
-#define AXIS1_SERVO_PH2_PIN     AXIS1_STEP_PIN
 
 // Axis2 Dec/Alt step/dir driver
 #define AXIS2_ENABLE_PIN        40
@@ -105,8 +105,6 @@
 #ifndef AXIS2_SENSE_HOME_PIN
   #define AXIS2_SENSE_HOME_PIN  AUX4_PIN
 #endif
-#define AXIS2_SERVO_PH1_PIN     AXIS2_DIR_PIN
-#define AXIS2_SERVO_PH2_PIN     AXIS2_STEP_PIN
 
 // For rotator stepper driver
 #define AXIS3_ENABLE_PIN        11
@@ -117,8 +115,6 @@
 #define AXIS3_STEP_PIN          26
 #define SHARED_DIRECTION_PINS                    // Hint that the direction pins are shared
 #define AXIS3_DIR_PIN           27
-#define AXIS1_ENCODER_A_PIN     AXIS3_STEP_PIN
-#define AXIS1_ENCODER_B_PIN     AXIS3_DIR_PIN
 
 // For focuser1 stepper driver
 #define AXIS4_ENABLE_PIN        28
@@ -128,8 +124,6 @@
 #define AXIS4_M3_PIN            AUX1_PIN         // SPI MISO (UART RX)
 #define AXIS4_STEP_PIN          32
 #define AXIS4_DIR_PIN           27
-#define AXIS2_ENCODER_A_PIN     AXIS4_STEP_PIN
-#define AXIS2_ENCODER_B_PIN     AUX1_PIN
 
 // For focuser2 stepper driver
 #define AXIS5_ENABLE_PIN        11

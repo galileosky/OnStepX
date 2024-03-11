@@ -31,6 +31,28 @@
   #define AXIS9_ENCODER OFF
 #endif
 
+#if AXIS1_ENCODER == AS37_H39B_B || AXIS2_ENCODER == AS37_H39B_B || AXIS3_ENCODER == AS37_H39B_B || \
+    AXIS4_ENCODER == AS37_H39B_B || AXIS5_ENCODER == AS37_H39B_B || AXIS6_ENCODER == AS37_H39B_B || \
+    AXIS7_ENCODER == AS37_H39B_B || AXIS8_ENCODER == AS37_H39B_B || AXIS9_ENCODER == AS37_H39B_B
+  #define HAS_AS37_H39B_B
+#endif
+
+#if AXIS1_ENCODER == JTW_24BIT || AXIS2_ENCODER == JTW_24BIT || AXIS3_ENCODER == JTW_24BIT || \
+    AXIS4_ENCODER == JTW_24BIT || AXIS5_ENCODER == JTW_24BIT || AXIS6_ENCODER == JTW_24BIT || \
+    AXIS7_ENCODER == JTW_24BIT || AXIS8_ENCODER == JTW_24BIT || AXIS9_ENCODER == JTW_24BIT
+  #define HAS_JTW_24BIT
+#endif
+
+#if AXIS1_ENCODER == JTW_26BIT || AXIS2_ENCODER == JTW_26BIT || AXIS3_ENCODER == JTW_26BIT || \
+    AXIS4_ENCODER == JTW_26BIT || AXIS5_ENCODER == JTW_26BIT || AXIS6_ENCODER == JTW_26BIT || \
+    AXIS7_ENCODER == JTW_26BIT || AXIS8_ENCODER == JTW_26BIT || AXIS9_ENCODER == JTW_26BIT
+  #define HAS_JTW_26BIT
+#endif
+
+#if defined(HAS_AS37_H39B_B) || defined(HAS_JTW_24BIT) || defined(HAS_JTW_26BIT)
+  #define HAS_BISS_C
+#endif
+
 class Encoder {
   public:
     // get device ready for use
@@ -44,6 +66,15 @@ class Encoder {
 
     // set current position to value
     virtual void write(int32_t count);
+
+    // set the virtual encoder velocity in counts per second
+    virtual void setVelocity(float countsPerSec) { /* normally does nothing */ }
+
+    // set the virtual encoder direction (-1 is reverse, 1 is forward)
+    virtual void setDirection(volatile int8_t *direction) { /* normally does nothing */ }
+
+    // true if this is a virtual encoder
+    bool isVirtual = false;
 
     // true if encoder count is ready
     bool ready = true;

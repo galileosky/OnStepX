@@ -69,7 +69,7 @@ class StepDirDriver {
     virtual bool enable(bool state) { UNUSED(state); return false; }
 
     // calibrate the motor driver if required
-    virtual void calibrate() {}
+    virtual void calibrateDriver() {}
 
     // get the pulse width in nanoseconds, if unknown (-1) returns 2000 nanoseconds
     long getPulseWidth();
@@ -83,7 +83,6 @@ class StepDirDriver {
     StepDirDriverSettings settings;
 
   protected:
-    inline float mAToCs(float mA) { return 32.0F*(((mA/1000.0F)*(rSense+0.02F))/0.325F) - 1.0F; }
     float rSense = 0.11F;
 
     uint8_t axisNumber;
@@ -92,7 +91,7 @@ class StepDirDriver {
       DriverStatus lastStatus = {false, {false, false}, {false, false}, false, false, false, false};
     #endif
     unsigned long timeLastStatusUpdate = 0;
-  
+
     const int16_t* microsteps;
     int16_t microstepRatio = 1;
     int16_t microstepCode = OFF;
