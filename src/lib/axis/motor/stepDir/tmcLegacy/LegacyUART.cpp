@@ -93,6 +93,9 @@ void StepDirTmcUART::init(float param1, float param2, float param3, float param4
     }
   }
 
+  driver->useExternalSenseResistors();
+  driver->enableAnalogCurrentScaling();
+
   driver->enable();
   driver->moveUsingStepDirInterface();
   driver->setPwmOffset(pc_pwm_ofs);
@@ -191,6 +194,7 @@ void StepDirTmcUART::updateStatus() {
       status.outputB.shortToGround = (bool)tmc2209Status.short_to_ground_b || (bool)tmc2209Status.low_side_short_b;
       status.outputB.openLoad      = (bool)tmc2209Status.open_load_b;
       status.overTemperatureWarning = (bool)tmc2209Status.over_temperature_warning;
+      status.overTemperature       = (bool)tmc2209Status.over_temperature_shutdown;
       status.standstill            = (bool)tmc2209Status.standstill;
 
       // open load indication is not reliable in standstill

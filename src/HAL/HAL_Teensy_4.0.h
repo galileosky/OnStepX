@@ -7,8 +7,8 @@
 // This platform has digitalReadFast, digitalWriteFast, etc.
 #define HAL_HAS_DIGITAL_FAST
 
-#define HAL_FRACTIONAL_SEC 1000.0F
 // Base rate for critical task timing
+#define HAL_FRACTIONAL_SEC 500.0F
 
 // Analog read and write
 #ifndef ANALOG_READ_RANGE
@@ -28,6 +28,7 @@
 #define HAL_MAXRATE_LOWER_LIMIT 1.5
 #define HAL_PULSE_WIDTH 0  // effectively disable pulse mode
 #define HAL_FAST_PROCESSOR
+#define HAL_VFAST_PROCESSOR
 
 // New symbol for the default I2C port -------------------------------------------------------------
 #include <Wire.h>

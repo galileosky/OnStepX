@@ -35,12 +35,12 @@ void Park::init() {
   state = settings.state;
 
   // configure any associated sense/signal pins
-  #if PARK_SENSE != OFF && PARK_SENSE_PIN != OFF
+  #if (PARK_SENSE) != OFF && (PARK_SENSE_PIN) != OFF
     VLF("MSG: Mount, park adding sense");
     parkSenseHandle = sense.add(PARK_SENSE_PIN, PARK_SENSE_INIT, PARK_SENSE);
   #endif
 
-  #if PARK_SIGNAL != OFF && PARK_SIGNAL_PIN != OFF
+  #if (PARK_SIGNAL) != OFF && (PARK_SIGNAL_PIN) != OFF
     VLF("MSG: Mount, park adding signal");
     parkSignalHandle = sense.add(PARK_SIGNAL_PIN, PARK_SIGNAL_INIT, PARK_SIGNAL);
     
@@ -55,7 +55,7 @@ CommandError Park::set() {
   if (state == PS_PARKED)      return CE_PARKED;
   if (goTo.state != GS_NONE)   return CE_SLEW_IN_MOTION;
   if (guide.state != GU_NONE)  return CE_SLEW_IN_MOTION;
-  if (mount.isFault())         return CE_SLEW_ERR_HARDWARE_FAULT;
+  if (mount.motorFault())      return CE_SLEW_ERR_HARDWARE_FAULT;
 
   VLF("MSG: Mount, setting park position");
 
@@ -95,9 +95,9 @@ CommandError Park::request() {
     if (state == PS_PARKING)     return CE_PARK_FAILED;
     if (state == PS_PARK_FAILED) return CE_PARK_FAILED;
     if (!mount.isEnabled())      return CE_SLEW_ERR_IN_STANDBY;
-    if (mount.isFault())         return CE_SLEW_ERR_HARDWARE_FAULT;
     if (goTo.state != GS_NONE)   return CE_SLEW_IN_MOTION;
     if (guide.state != GU_NONE)  return CE_SLEW_IN_MOTION;
+    if (mount.motorFault())      return CE_SLEW_ERR_HARDWARE_FAULT;
 
     CommandError e = goTo.validate();
     if (e != CE_NONE) return e;
@@ -166,7 +166,7 @@ void Park::requestAborted() {
 // once parked save the park state
 void Park::requestDone() {
 
-  #if PARK_SENSE != OFF && PARK_SENSE_PIN != OFF
+  #if (PARK_SENSE) != OFF && (PARK_SENSE_PIN) != OFF
     if (sense.isOn(parkSenseHandle)) {
       VLF("MSG: Mount, park sense state indicates success.");
     } else {
@@ -214,16 +214,17 @@ CommandError Park::restore(bool withTrackingOn) {
       }
     #endif
   }
-  if (mount.isFault()) {
-    VLF("MSG: Mount, unpark failed due to mount fault");
-    return CE_SLEW_ERR_HARDWARE_FAULT;
-  }
   if (!site.isDateTimeReady()) {
     VLF("MSG: Mount, unpark postponed no date/time");
     return CE_PARKED;
   }
+  if (mount.motorFault()) return CE_SLEW_ERR_HARDWARE_FAULT;
 
-  VF("MSG: Mount, unparking "); if (withTrackingOn) { VLF("with tracking sidereal"); } else { VLF("with tracking disabled"); } 
+  if (withTrackingOn) {
+    VLF("MSG: Mount, unparking");
+  } else {
+    VLF("MSG: Mount, recovering unpark position");
+  }
 
   #if AXIS1_PEC == ON
     wormSenseSteps = settings.wormSensePositionSteps;
@@ -246,6 +247,10 @@ CommandError Park::restore(bool withTrackingOn) {
     parkTarget.h = settings.position.h;
     parkTarget.d = settings.position.d;
     parkTarget.pierSide = settings.position.pierSide;
+    if (transform.mountType == GEM) {
+      if (parkTarget.pierSide == PIER_SIDE_EAST && parkTarget.h < -limits.settings.pastMeridianE) parkTarget.h += PI*2.0;
+      if (parkTarget.pierSide == PIER_SIDE_WEST && parkTarget.h > limits.settings.pastMeridianW) parkTarget.h -= PI*2.0;
+    }
 
     // set the mount target
     double a1, a2;
@@ -262,15 +267,19 @@ CommandError Park::restore(bool withTrackingOn) {
     axis2.setBacklash(mount.settings.backlash.axis2);
   }
   
-  state = PS_UNPARKED;
-  settings.state = state;
-  nv.updateBytes(NV_MOUNT_PARK_BASE, &settings, sizeof(ParkSettings));
-
   limits.enabled(true);
   if (!goTo.absoluteEncodersPresent) mount.syncFromOnStepToEncoders = true;
-  if (withTrackingOn) mount.tracking(true);
 
-  VLF("MSG: Mount, unparking done");
+  if (withTrackingOn) {
+    state = PS_UNPARKED;
+    settings.state = state;
+    nv.updateBytes(NV_MOUNT_PARK_BASE, &settings, sizeof(ParkSettings));
+    mount.tracking(true);
+    VLF("MSG: Mount, unparking done");
+  } else {
+    VLF("MSG: Mount, recovering unpark position done");
+  }
+
   return CE_NONE;
 }
 
