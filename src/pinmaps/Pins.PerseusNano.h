@@ -31,13 +31,13 @@
 #define I2C_SCL_PIN             22
 
 // The multi-purpose pins (Aux3..Aux8 can be analog pwm/dac if supported)
-#define AUX2_PIN                39               // M3 pin TMC UART RX
-#define AUX3_PIN                14               // Home SW for Axis1
+#define AUX2_PIN                13               // M3 pin TMC UART RX
+#define AUX3_PIN                13               // Home SW for Axis1
 #define AUX4_PIN                13               // Home SW for Axis2
-#define AUX5_PIN                1                // TX0 main USB, etc.
-#define AUX6_PIN                3                // RX0 main USB, etc.
+#define AUX5_PIN                13               // TX0 main USB, etc.
+#define AUX6_PIN                13               // RX0 main USB, etc.
 #define AUX7_PIN                23               // Limit SW, PPS, etc.
-#define AUX8_PIN                25               // 1-Wire, Status LED, Reticle LED, Tone, etc.
+#define AUX8_PIN                23               // 1-Wire, Status LED, Reticle LED, Tone, etc.
 
 // Misc. pins
 #ifndef ONE_WIRE_PIN
