@@ -34,7 +34,7 @@ void Home::init() {
   #else
     if (transform.mountType == ALTAZM) position.a = degToRad(AXIS2_HOME_DEFAULT); else position.d = degToRad(AXIS2_HOME_DEFAULT);
   #endif
-  if (transform.mountType != ALTAZM) {
+  if (transform.isEquatorial()) {
     axis1.setReverse(site.locationEx.latitude.sign < 0.0);
   }
 
@@ -76,7 +76,7 @@ CommandError Home::request() {
         if (abs(a1) > degToRad(AXIS1_SENSE_HOME_DIST_LIMIT) - abs(arcsecToRad(settings.senseOffset.axis1))) return CE_SLEW_ERR_OUTSIDE_LIMITS;
         if (abs(a2) > degToRad(AXIS2_SENSE_HOME_DIST_LIMIT) - abs(arcsecToRad(settings.senseOffset.axis2))) return CE_SLEW_ERR_OUTSIDE_LIMITS;
 
-        CommandError e = reset();
+        CommandError e = reset(false);
         if (e != CE_NONE) return e;
       #endif
 
@@ -135,7 +135,9 @@ void Home::guideDone(bool success) {
   #if AXIS1_SECTOR_GEAR == OFF && AXIS2_TANGENT_ARM == OFF
     if (success && useOffset()) {
       reset(isRequestWithReset);
+
       if (transform.mountType == ALTAZM) transform.horToEqu(&position);
+
       VLF("MSG: Mount, finishing move to home with goto");
       axis1.setTargetCoordinate(axis1.getTargetCoordinate() - arcsecToRad(site.locationEx.latitude.sign*settings.senseOffset.axis1));
       axis1.autoGoto(goTo.getRadsPerSecond());
@@ -256,7 +258,7 @@ Coordinate Home::getPosition(CoordReturn coordReturn) {
     break;
     case CR_MOUNT_ALT:
     case CR_MOUNT_HOR:
-      if (transform.mountType != ALTAZM) transform.equToHor(&position);
+      if (transform.isEquatorial()) transform.equToHor(&position);
     break;
     case CR_MOUNT_ALL:
       if (transform.mountType == ALTAZM) transform.horToEqu(&position); else transform.equToHor(&position);
