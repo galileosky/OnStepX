@@ -37,7 +37,7 @@
 #define AUX5_PIN                13               // TX0 main USB, etc.
 #define AUX6_PIN                13               // RX0 main USB, etc.
 #define AUX7_PIN                23               // Limit SW, PPS, etc.
-#define AUX8_PIN                23               // 1-Wire, Status LED, Reticle LED, Tone, etc.
+#define AUX8_PIN                14               // 1-Wire, Status LED, Reticle LED, Tone, etc.
 
 // Misc. pins
 #ifndef ONE_WIRE_PIN
@@ -61,14 +61,14 @@
   #undef MOUNT_LED_ON_STATE
 #endif
 #define MOUNT_LED_ON_STATE      HIGH
-#define MOUNT_LED_PIN           STATUS_LED_PIN   // Default LED Anode (+)
+#define MOUNT_LED_PIN           19               // Default LED Anode (+)
 #ifndef RETICLE_LED_PIN
-  #define RETICLE_LED_PIN       19//AUX8_PIN     // Default LED Cathode (-)
+  #define RETICLE_LED_PIN       AUX8_PIN         // Default LED Cathode (-)
 #endif
 
 // For a piezo buzzer
 #ifndef STATUS_BUZZER_PIN
-  #define STATUS_BUZZER_PIN     2//12            // [must be low at boot 12] Tone
+  #define STATUS_BUZZER_PIN     25//12            // [must be low at boot 12] Tone
 #endif
 
 // The PPS pin is a 3.3V logic input, OnStep measures time between rising edges and adjusts the internal sidereal clock frequency
