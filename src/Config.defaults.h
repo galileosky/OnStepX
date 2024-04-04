@@ -43,12 +43,25 @@
 #define SERIAL_GPS_BAUD               9600
 #endif
 
+// ESP32 automatically set wifi radio for bluetooth or IP modes 
+#ifdef SERIAL_RADIO
+#if SERIAL_RADIO == BLUETOOTH
+#define SERIAL_BT_MODE SLAVE
+#elif SERIAL_RADIO == WIFI_ACCESS_POINT
+#define SERIAL_IP_MODE WIFI_ACCESS_POINT
+#define WEB_SERVER ON
+#elif SERIAL_RADIO == WIFI_STATION
+#define SERIAL_IP_MODE WIFI_STATION
+#define WEB_SERVER ON
+#endif
+#endif
+
 // ESP32 virtual serial bluetooth command channel
 #ifndef SERIAL_BT_MODE
 #define SERIAL_BT_MODE                OFF                         // use SLAVE to enable the interface (ESP32 only)
 #endif
 #ifndef SERIAL_BT_NAME
-#define SERIAL_BT_NAME                "OnStep"                    // Bluetooth name of command channel
+#define SERIAL_BT_NAME                "OnStepX"                   // Bluetooth name of command channel
 #endif
 
 // ESP32 virtual serial IP command channels
@@ -148,6 +161,12 @@
 #endif
 
 // gpio device
+// DS2413: for 2-ch or 4-ch using 1-wire gpio's (one or two devices.)
+// SWS: for 8-ch Serial gpio (normally 4 unused encoder pins.)
+// MCP23008: for 8-ch I2C gpio.
+// MCP23017, X9555, or X8575: for 16-ch I2C gpio.
+// SSR74HC595: for up to 32-ch gpio (serial shift register, output only.)
+// Works w/most OnStep features, channels assigned in order pin# 512 and up.
 #ifndef GPIO_DEVICE
 #define GPIO_DEVICE                   OFF
 #endif
@@ -196,7 +215,7 @@
 #ifndef AXIS1_LIMIT_MAX
 #define AXIS1_LIMIT_MAX               180                         // in degrees
 #endif
-#ifdef AXIS1_SYNC_THRESHOLD_DEGREES
+#ifdef AXIS1_SYNC_THRESHOLD_DEGREES                               // maximum distance from absolute encoder pos in degrees for syncs
 #define AXIS1_SYNC_THRESHOLD lround(AXIS1_SYNC_THRESHOLD_DEGREES*AXIS1_STEPS_PER_DEGREE)
 #endif
 #ifndef AXIS1_SYNC_THRESHOLD
@@ -283,7 +302,7 @@
   #endif
 
   #ifdef AXIS1_SERVO_VELOCITY_MAX_DPS
-  #define AXIS1_SERVO_VELOCITY_MAX      lround(AXIS1_SERVO_VELOCITY_MAX_DPS*AXIS1_STEPS_PER_DEGREE)
+  #define AXIS1_SERVO_VELOCITY_MAX      lround(AXIS1_SERVO_VELOCITY_MAX_DPS*AXIS1_MOTOR_STEPS_PER_DEGREE)
   #endif
   #ifndef AXIS1_SERVO_VELOCITY_MAX
   #define AXIS1_SERVO_VELOCITY_MAX      100                       // max velocity, in % for DC motors, in steps/s for stepper motors
@@ -459,7 +478,7 @@
   #endif
 
   #ifdef AXIS2_SERVO_VELOCITY_MAX_DPS
-  #define AXIS2_SERVO_VELOCITY_MAX      lround(AXIS2_STEPS_PER_DEGREE*AXIS2_SERVO_VELOCITY_MAX_DPS)
+  #define AXIS2_SERVO_VELOCITY_MAX      lround(AXIS2_SERVO_VELOCITY_MAX_DPS*AXIS2_MOTOR_STEPS_PER_DEGREE)
   #endif
   #ifndef AXIS2_SERVO_VELOCITY_MAX
   #define AXIS2_SERVO_VELOCITY_MAX      100
@@ -580,11 +599,14 @@
 #ifndef MOUNT_AUTO_HOME_DEFAULT
 #define MOUNT_AUTO_HOME_DEFAULT       OFF                         // ON default find home at boot
 #endif
+#ifndef MOUNT_HORIZON_AVOIDANCE
+#define MOUNT_HORIZON_AVOIDANCE       ON                          // ON allows eq mode horizon avoidance
+#endif
 
 #ifndef AXIS1_TARGET_TOLERANCE
-#define AXIS1_TARGET_TOLERANCE        0.0F                        // in arc-seconds
+#define AXIS1_TARGET_TOLERANCE        0.0F                        // distance in arc-seconds when goto is at destination
 #endif
-#ifndef AXIS1_HOME_TOLERANCE                                      // in arc-seconds
+#ifndef AXIS1_HOME_TOLERANCE                                      // distance in arc-seconds when at home
 #define AXIS1_HOME_TOLERANCE          AXIS1_TARGET_TOLERANCE + (1800.0/AXIS1_STEPS_PER_DEGREE)
 #endif
 #ifndef AXIS1_SECTOR_GEAR
@@ -656,6 +678,9 @@
 #endif
 #ifndef TIME_LOCATION_PPS_SENSE
 #define TIME_LOCATION_PPS_SENSE       OFF
+#endif
+#ifndef TIME_LOCATION_PPS_SYNC
+#define TIME_LOCATION_PPS_SYNC        OFF                         // adjust timer rates to keep time in sync with PPS
 #endif
 
 // limits
@@ -937,6 +962,9 @@
   #define AXIS3_SERVO_PH2_STATE         LOW
   #endif
 
+  #ifdef AXIS3_SERVO_VELOCITY_MAX_DPS
+  #define AXIS3_SERVO_VELOCITY_MAX      lround(AXIS3_SERVO_VELOCITY_MAX_DPS*AXIS3_MOTOR_STEPS_PER_DEGREE)
+  #endif
   #ifndef AXIS3_SERVO_VELOCITY_MAX
   #define AXIS3_SERVO_VELOCITY_MAX      100
   #endif
