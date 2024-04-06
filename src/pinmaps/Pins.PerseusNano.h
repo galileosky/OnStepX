@@ -61,7 +61,7 @@
   #undef MOUNT_LED_ON_STATE
 #endif
 #define MOUNT_LED_ON_STATE      HIGH
-#define MOUNT_LED_PIN           19               // Default LED Anode (+)
+#define MOUNT_LED_PIN           12               // Default LED Anode (+)
 #ifndef RETICLE_LED_PIN
   #define RETICLE_LED_PIN       AUX8_PIN         // Default LED Cathode (-)
 #endif
