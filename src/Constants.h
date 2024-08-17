@@ -79,15 +79,18 @@
 
 // MOUNT TYPE
 #define MOUNT_TYPE_FIRST            1
+#define MOUNT_SUBTYPE_FIRST         1
 #define GEM                         1      // German Equatorial Mount, meridian flips enabled
 #define FORK                        2      // Fork Mount, meridian flips disabled
 #define ALTAZM                      3      // Altitude Azimuth Mounts, Dobsonians, etc.
-#define GEM_TA                      4      // GEM, w/tangent arm Declination
-#define GEM_TAC                     5      // GEM, w/tangent arm Declination and geometry correction
-#define FORK_TA                     6      // FORK, w/tangent arm Declination
-#define FORK_TAC                    7      // FORK, w/tangent arm Declination and geometry correction
-#define ALTAZM_UNL                  8      // ALTAZM, w/unlimited Azmiuth motion
-#define MOUNT_TYPE_LAST             8
+#define ALTALT                      4      // Altitude Altitude Mounts
+#define MOUNT_SUBTYPE_LAST          4
+#define GEM_TA                      5      // GEM, w/tangent arm Declination
+#define GEM_TAC                     6      // GEM, w/tangent arm Declination and geometry correction
+#define FORK_TA                     7      // FORK, w/tangent arm Declination
+#define FORK_TAC                    8      // FORK, w/tangent arm Declination and geometry correction
+#define ALTAZM_UNL                  9      // ALTAZM, w/unlimited Azmiuth motion
+#define MOUNT_TYPE_LAST             9
 
 // MOUNT COORDS
 #define MOUNT_COORDS_FIRST          1
@@ -142,7 +145,8 @@
 #define INTERVALOMETER              4      // control an camera shutter
 #define MOMENTARY_SWITCH            5      // control an simple momentary on/off switch
 #define HIDDEN_SWITCH               6      // control an hidden on/off switch (for controlling a pin state at boot)
-#define AUX_FEATURE_PURPOSE_LAST    6
+#define COVER_SWITCH                7      // control an servo driven OTA cover where "on" is closed and "off" is open
+#define AUX_FEATURE_PURPOSE_LAST    7
 
 // --------------------------------------------------------------------------------------------------------------------------
 
@@ -150,7 +154,7 @@
 #define PROD_ABV                    "OnStepX"
 
 // task manager
-#define TASKS_MAX                   48     // up to 48 tasks
+#define TASKS_MAX                   52     // up to 52 tasks
 #define TASKS_SKIP_MISSED                  // just skip missed tasks if too late
 #ifdef ESP32
   #define TASKS_HWTIMERS             4     // up to 4 hardware timers
