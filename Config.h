@@ -32,8 +32,9 @@
 #define STATUS_LED                    OFF //    OFF, Steady illumination if no error, blinks w/error code otherwise.          Option
 
 // RETICLE CONTROL ------------------------------- see https://onstep.groups.io/g/main/wiki/Configuration_Controller#RETICLE_CONTROL
-#define RETICLE_LED_DEFAULT           126 //OFF    OFF, n. Where n=0..255 (0..100%) activates feature sets default brightness.   Option
-#define RETICLE_LED_MEMORY             ON //OFF    OFF, ON Remember reticle brightness across power cycles.                      Option
+#define RETICLE_LED_DEFAULT           126 //    OFF, n. Where n=0..255 (0..100%) activates feature sets default brightness.   Option
+#define RETICLE_LED_MEMORY            OFF //    OFF, ON Remember reticle brightness across power cycles.                      Option
+#define RETICLE_LED_INVERT            OFF //    OFF, ON Inverts control for cases where 0V is max brightness.                 Option
 
 // WEATHER SENSOR --------------------------------- see https://onstep.groups.io/g/main/wiki/Configuration_Controller#WEATHER_SENSOR
 #define WEATHER                       OFF //    OFF, BME280 (I2C 0x77,) BME280_0x76, BME280_SPI (see pinmap for CS.)          Option
@@ -45,6 +46,7 @@
                                           //         Applies to all axes.
 
 // NON-VOLATILE MEMORY ---------------------------------------- see https://onstep.groups.io/g/main/wiki/Configuration_Controller#NV
+#define NV_DRIVER              NV_DEFAULT // NV_DEF, Use platforms default non-volatile device to remember runtime settings.  Option
 
 // =================================================================================================================================
 // MOUNT ===========================================================================================================================
