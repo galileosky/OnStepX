@@ -5,8 +5,10 @@
 
 #ifdef MOUNT_PRESENT
 
-#include "../../../libApp/commands/ProcessCmds.h"
 #include "../../../lib/tasks/OnTask.h"
+#include "../../../lib/nv/Nv.h"
+
+#include "../../../libApp/commands/ProcessCmds.h"
 
 #include "../../Telescope.h"
 #include "../Mount.h"
@@ -15,26 +17,24 @@
 #include "../park/Park.h"
 #include "../home/Home.h"
 #include "../limits/Limits.h"
+#include "../startupAuthority/StartupAuthority.h"
 #include "../status/Status.h"
 
 inline void guideWrapper() { guide.poll(); }
 
+void Guide::finalizeTimeLimit(unsigned long &guideTimeLimit) {
+  if (!limits.isEnabled()) guideTimeLimit = GUIDE_TIME_NO_LIMITS*1000UL;
+  if (guideTimeLimit == 0) guideTimeLimit = 0x1FFFFFFF; // unlimited 0 means the maximum period, about 49 days
+}
+
 void Guide::init() {
-  // confirm the data structure size
-  if (GuideSettingsSize < sizeof(GuideSettings)) { nv.initError = true; DL("ERR: Guide::init(), GuideSettingsSize error"); }
 
-  // write the default settings to NV
-  if (!nv.hasValidKey()) {
-    VLF("MSG: Mount, guide writing defaults to NV");
-    nv.writeBytes(NV_MOUNT_GUIDE_BASE, &settings, sizeof(GuideSettings));
-  }
+  nvKey = nv().kv().computeKey("GUIDE_SETTINGS");
+  if (!nv().kv().getOrInit(nvKey, settings.pulseRateSelect)) { DLF("WRN: Nv, init failed for GUIDE_SETTINGS"); }
 
-  // read the settings
-  nv.readBytes(NV_MOUNT_GUIDE_BASE, &settings, sizeof(GuideSettings));
-
-  // reset default guide rate to 20X, value stored in NV isn't used
   settings.axis1RateSelect = GR_20X;
   settings.axis2RateSelect = GR_20X;
+  settings.pulseRateSelect = constrain(settings.pulseRateSelect, GR_QUARTER, GR_1X);
 
   // start guide monitor task
   VF("MSG: Mount, start guide monitor task (rate "); V(FRACTIONAL_SEC_US/2); VF("us priority 3)... ");
@@ -44,9 +44,10 @@ void Guide::init() {
 }
 
 // start guide at a given direction and rate on Axis1
-CommandError Guide::startAxis1(GuideAction guideAction, GuideRateSelect rateSelect, unsigned long guideTimeLimit) {
+CommandError Guide::startAxis1(GuideAction guideAction, GuideRateSelect rateSelect, unsigned long guideTimeLimit, bool pulseGuide) {
   if (guideAction == GA_NONE) return CE_NONE;
   if (state == GU_HOME_GUIDE || state == GU_HOME_GUIDE_ABORT) return CE_NONE;
+  if (pulseGuide && !limits.isEnabled()) return CE_SLEW_ERR_OUTSIDE_LIMITS;
 
   CommandError e = validate(1, guideAction);
   if (e != CE_NONE) return e;
@@ -54,15 +55,15 @@ CommandError Guide::startAxis1(GuideAction guideAction, GuideRateSelect rateSele
   guideActionAxis1 = guideAction;
   float rate = rateSelectToRate(rateSelect, 1);
 
-  // unlimited 0 means the maximum period, about 49 days
-  if (guideTimeLimit == 0) guideTimeLimit = 0x1FFFFFFF;
+  finalizeTimeLimit(guideTimeLimit);
   guideFinishTimeAxis1 = millis() + guideTimeLimit;
 
   if (rate <= 2) {
     axis1.setPowerDownOverrideTime(300000UL);
     axis2.setPowerDownOverrideTime(300000UL);
   }
-  if (rate <= 2 && rateSelect != GR_CUSTOM) {
+
+  if (limits.isEnabled() && rate <= 2 && (pulseGuide || rateSelect != GR_CUSTOM)) {
     backlashEnableControl(false);
     state = GU_PULSE_GUIDE;
     if (guideAction == GA_REVERSE) { VF("MSG: Guide, Axis1 rev @"); rateAxis1 = -rate; } else { VF("MSG: Guide, Axis1 fwd @"); rateAxis1 = rate; }
@@ -101,9 +102,10 @@ void Guide::stopAxis1(GuideAction stopDirection, bool abort) {
 }
 
 // start guide at a given direction and rate on Axis2
-CommandError Guide::startAxis2(GuideAction guideAction, GuideRateSelect rateSelect, unsigned long guideTimeLimit) {
+CommandError Guide::startAxis2(GuideAction guideAction, GuideRateSelect rateSelect, unsigned long guideTimeLimit, bool pulseGuide) {
   if (guideAction == GA_NONE) return CE_NONE;
   if (state == GU_HOME_GUIDE || state == GU_HOME_GUIDE_ABORT) return CE_NONE;
+  if (pulseGuide && !limits.isEnabled()) return CE_SLEW_ERR_OUTSIDE_LIMITS;
 
   CommandError e = validate(2, guideAction); // if successful always sets pierSide
   if (e != CE_NONE) return e;
@@ -113,15 +115,15 @@ CommandError Guide::startAxis2(GuideAction guideAction, GuideRateSelect rateSele
   float fastestRate = rateSelectToRate(GR_MAX, 2)*((float)(AXIS2_SLEW_RATE_PERCENT)/100.0F);
   if (rate > fastestRate) rate = fastestRate;
 
-  // unlimited 0 means the maximum period, about 49 days
-  if (guideTimeLimit == 0) guideTimeLimit = 0x1FFFFFFF;
+  finalizeTimeLimit(guideTimeLimit);
   guideFinishTimeAxis2 = millis() + guideTimeLimit;
 
   if (rate <= 2) {
     axis1.setPowerDownOverrideTime(300000UL);
     axis2.setPowerDownOverrideTime(300000UL);
   }
-  if (rate <= 2 && rateSelect != GR_CUSTOM) {
+
+  if (limits.isEnabled() && rate <= 2 && (pulseGuide || rateSelect != GR_CUSTOM)) {
     state = GU_PULSE_GUIDE;
     backlashEnableControl(false);
     if (pierSide == PIER_SIDE_WEST) { if (guideAction == GA_FORWARD) guideAction = GA_REVERSE; else guideAction = GA_FORWARD; };
@@ -164,6 +166,7 @@ void Guide::stopAxis2(GuideAction stopDirection, bool abort) {
 CommandError Guide::startSpiral(GuideRateSelect rateSelect, unsigned long guideTimeLimit) {
   if (state == GU_SPIRAL_GUIDE) { stop(); return CE_NONE; }
   if (guideActionAxis1 != GA_NONE || guideActionAxis2 != GA_NONE) return CE_SLEW_IN_MOTION;
+  if (!limits.isEnabled()) return CE_SLEW_ERR_OUTSIDE_LIMITS;
   CommandError e = validate(0, GA_SPIRAL); if (e != CE_NONE) return e;
 
   backlashEnableControl(true);
@@ -174,8 +177,7 @@ CommandError Guide::startSpiral(GuideRateSelect rateSelect, unsigned long guideT
 
   VF("MSG: guideSpiralStart(), using guide rates to "); V(rateSelectToRate(spiralGuideRateSelect)); VL("X");
 
-  // unlimited 0 means the maximum period, about 49 days
-  if (guideTimeLimit == 0) guideTimeLimit = 0x1FFFFFFF;
+  finalizeTimeLimit(guideTimeLimit);
   spiralStartTime = millis();
   guideFinishTimeAxis1 = spiralStartTime + guideTimeLimit;
   guideFinishTimeAxis2 = guideFinishTimeAxis1;
@@ -213,6 +215,9 @@ CommandError Guide::startHome() {
     guideActionAxis2 = GA_HOME;
     axis2.setFrequencySlew(goTo.rate*((float)(AXIS2_SLEW_RATE_PERCENT)/100.0F));
     axis2.autoSlewHome();
+  #else
+    DLF("WRN: Mount, sensed home rejected because goto is disabled");
+    return CE_SLEW_ERR_UNSPECIFIED;
   #endif
   return CE_NONE;
 }
@@ -284,14 +289,14 @@ bool Guide::validAxis1(GuideAction guideAction) {
     if (transform.mountType == GEM && location.pierSide == PIER_SIDE_EAST) {
       if (location.h < -limits.settings.pastMeridianE) return false;
     }
-    if (location.a1 < axis1.settings.limits.min) return false;
+    if (location.a1 < axis1.getLimitMin()) return false;
   }
 
   if (guideAction == GA_FORWARD || guideAction == GA_SPIRAL) {
     if (transform.mountType == GEM && location.pierSide == PIER_SIDE_WEST) {
       if (location.h > limits.settings.pastMeridianW) return false;
     }
-    if (location.a1 > axis1.settings.limits.max) return false;
+    if (location.a1 > axis1.getLimitMax()) return false;
   }
   return true;
 }
@@ -307,36 +312,42 @@ bool Guide::validAxis2(GuideAction guideAction) {
     location.a2 = axis2.getMotorPosition();
   #endif
 
-  if (guideAction == GA_REVERSE || guideAction == GA_SPIRAL) {
-    if (pierSide == PIER_SIDE_WEST) {
-      if (fgt(location.a2, axis2.settings.limits.max)) return false;
-    } else {
-      if (flt(location.a2, axis2.settings.limits.min)) return false;
-    }
+  if (flt(location.a2, axis2.getLimitMin())) {
+    if (guideAction == GA_REVERSE || guideAction == GA_SPIRAL) return false;
   }
 
-  if (guideAction == GA_FORWARD || guideAction == GA_SPIRAL) {
-    if (pierSide == PIER_SIDE_WEST) {
-      if (flt(location.a2, axis2.settings.limits.min)) return false;
-    } else {
-      if (fgt(location.a2, axis2.settings.limits.max)) return false;
-    }
+  if (fgt(location.a2, axis2.getLimitMax())) {
+    if (guideAction == GA_FORWARD || guideAction == GA_SPIRAL) return false;
   }
+
   if (guideAction == GA_SPIRAL) {
     if (fabs(location.a2) > degToRad(75.0)) return false;
   }
+
   return true;
 }
 
 // general validation of guide request
 CommandError Guide::validate(int axis, GuideAction guideAction) {
-  if (!mount.isEnabled()) return CE_SLEW_ERR_IN_STANDBY;
+  if (!mount.isEnabled()) {
+    mount.enable(true);
+    if (!mount.isEnabled()) return CE_SLEW_ERR_IN_STANDBY;
+  }
+
   if ((guideAction == GA_SPIRAL || guideAction == GA_HOME) && mount.isSlewing()) return CE_SLEW_IN_MOTION;
 
   #if GOTO_FEATURE == ON
     if (park.state == PS_PARKED) return CE_SLEW_ERR_IN_PARK;
     if (goTo.state != GS_NONE) { goTo.abort(); return CE_SLEW_IN_MOTION; }
   #endif
+
+  if (guideAction != GA_HOME) {
+    CommandError e = startupAuthority.validateManualMotion();
+    if (e != CE_NONE) {
+      DLF("WRN: Guide, slew rejected because startup authority/limits are not ready");
+      return e;
+    }
+  }
 
   if (axis == 1 || guideAction == GA_SPIRAL) {
     if (!validAxis1(guideAction)) return CE_SLEW_ERR_OUTSIDE_LIMITS;
@@ -353,6 +364,8 @@ CommandError Guide::validate(int axis, GuideAction guideAction) {
   }
 
   if (mount.motorFault()) return CE_SLEW_ERR_HARDWARE_FAULT;
+
+  mountStatus.wake();
 
   return CE_NONE;
 }

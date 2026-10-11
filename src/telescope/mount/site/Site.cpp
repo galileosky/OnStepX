@@ -6,12 +6,14 @@
 #ifdef MOUNT_PRESENT
 
 #include "../../../lib/tasks/OnTask.h"
+#include "../../../lib/nv/Nv.h"
 
 #include "../../Telescope.h"
 #include "../park/Park.h"
 #include "../home/Home.h"
 #include "../limits/Limits.h"
 #include "../Mount.h"
+#include "../startupAuthority/StartupAuthority.h"
 
 // fractional second sidereal clock (fracsec or millisecond)
 volatile unsigned long fracLAST;
@@ -38,7 +40,7 @@ IRAM_ATTR void clockTickWrapper() { fracLAST++; }
 
       JulianDate jd;
       VLF("MSG: Mount, getting date/time from GPS");
-      unsigned long syncTimeout = millis() + 1000;
+      unsigned long syncTimeout = millis() + 1000U;
       while (!site.tls->get(jd) && (long)(millis() - syncTimeout) < 0) { };
       if ((long)(millis() - syncTimeout) < 0) {
         site.dateIsReady = true;
@@ -55,9 +57,9 @@ IRAM_ATTR void clockTickWrapper() { fracLAST++; }
     } else
 
     if ((long)(millis() - site.updateTimeoutTime) > 0) {
-      VLF("WRN: Mount, GPS timed out stopping monitor task");
+      DLF("WRN: Mount, GPS timed out stopping monitor task");
       tasks.setDurationComplete(tasks.getHandleByName("gpsChk"));
-      VLF("WRN: TLS, GPS timed out stopping GPS polling task");
+      DLF("WRN: TLS, GPS timed out stopping GPS polling task");
       tasks.setDurationComplete(tasks.getHandleByName("gpsPoll"));
       initError.tls = true; 
     }
@@ -80,9 +82,9 @@ IRAM_ATTR void clockTickWrapper() { fracLAST++; }
     } else
 
     if ((long)(millis() - site.updateTimeoutTime) > 0) {
-      VLF("MSG: Mount, NTP timed out stopping monitor task");
+      DLF("MSG: Mount, NTP timed out stopping monitor task");
       tasks.setDurationComplete(tasks.getHandleByName("ntpChk"));
-      VLF("WRN: TLS, NTP timed out stopping monitor task");
+      DLF("WRN: TLS, NTP timed out stopping monitor task");
       tasks.setDurationComplete(tasks.getHandleByName("ntp"));
       initError.tls = true; 
     }
@@ -112,7 +114,7 @@ IRAM_ATTR void clockTickWrapper() { fracLAST++; }
     // DF("MSG: Site,"); D(syncc); DF("sub-micro delta="); D((long)pps.averageSubMicros - 16000000L); DF("us, pps="); D(p/1000L); DF("ms, time.sec="); D(s/1000L); DF("ms, delta="); D(delta/1000); DLF("ms");
 
     if (abs(deltaAvg) < 3000L) return;
-    pps.averageSubMicrosSkew = (-deltaAvg*HAL_MIN_PPS_SUB_MICRO)/2000L;
+    pps.averageSubMicrosSkew = (-deltaAvg*SITE_MIN_PPS_SUB_MICRO)/2000L;
     if (pps.averageSubMicrosSkew < -128) pps.averageSubMicrosSkew = -128; else
     if (pps.averageSubMicrosSkew > 128) pps.averageSubMicrosSkew = 128;
   }
@@ -160,12 +162,12 @@ void Site::init() {
         VLF("MSG: Mount, site get Date/Time from TLS");
       } else {
         #if TIME_LOCATION_SOURCE == GPS
-          updateTimeoutTime = millis() + GPS_TIMEOUT_MINUTES*60000UL;
+          updateTimeoutTime = millis() + GPS_TIMEOUT_MINUTES*60000U;
           VF("MSG: Site, start GPS check task (rate 5000ms priority 7)... ");
           if (tasks.add(5000, 0, true, 7, gpsCheck, "gpsChk")) { VLF("success"); } else { VLF("FAILED!"); }
         #endif
         #if TIME_LOCATION_SOURCE == NTP
-          updateTimeoutTime = millis() + NTP_TIMEOUT_SECONDS*1000UL;
+          updateTimeoutTime = millis() + NTP_TIMEOUT_SECONDS*1000U;
           VF("MSG: Site, start NTP check task (rate 5000ms priority 7)... ");
           if (tasks.add(5000, 0, true, 7, ntpCheck, "ntpChk")) { VLF("success"); } else { VLF("FAILED!"); }
         #endif
@@ -187,7 +189,7 @@ void Site::init() {
 
     if (initError.tls) {
       DLF("WRN: Site::init(), Warning TLS initialization failed");
-      VLF("WRN: Site::init(), fallback to last Date/Time from NV");
+      DLF("WRN: Site::init(), fallback to last Date/Time from NV");
       readJD();
     }
   #else
@@ -200,7 +202,7 @@ void Site::init() {
   VF("MSG: Mount, site start sidereal timer task (rate 10ms priority 0)... ");
   delay(100);
   // period ms (0=idle), duration ms (0=forever), repeat, priority (highest 0..7 lowest), task_handle
-  taskHandle = tasks.add(0, 0, true, 0, clockTickWrapper, "ClkTick");
+  taskHandle = tasks.add(0, 0, true, 0, clockTickWrapper, "MtTick");
   if (taskHandle) {
     VLF("success"); 
     if (!tasks.requestHardwareTimer(taskHandle, 1)) { DLF("WRN: Site::init(), didn't get h/w timer for Clock (using s/w timer)"); }
@@ -264,12 +266,11 @@ void Site::setDateTime(JulianDate julianDate) {
   ut1 = julianDate;
   setSiderealTime(julianDate);
 
-  if (writeTime) nv.updateBytes(NV_SITE_JD_BASE, &ut1, JulianDateSize);
-  if (NV_ENDURANCE < NVE_MID) writeTime = false;
+  if (writeTime) nv().kv().put("DATE_TIME", ut1);
+  
+  if (nv().device().endurance() < NvDevice::Endurance::Mid) writeTime = false;
 
-  #if LIMIT_STRICT == ON
-    limits.enabled(isDateTimeReady());
-  #endif
+  limits.enabled(isDateTimeReady() && startupAuthority.trusted());
 }
 
 // gets the time in sidereal hours
@@ -355,36 +356,35 @@ double Site::julianDateToGAST(JulianDate julianDate) {
 
 // reads the julian date information from NV
 void Site::readJD() {
-  if (JulianDateSize < sizeof(ut1)) { nv.initError = true; DL("ERR: Site::readJD(), JulianDateSize error"); }
+  ut1.day = 2451544.5;
+  ut1.hour = 0.0;
 
-  if (!nv.hasValidKey() || nv.isNull(NV_SITE_JD_BASE, JulianDateSize)) {
-    VLF("MSG: Mount, site writing default date/time to NV");
-    ut1.day = 2451544.5;
-    ut1.hour = 0.0;
-    nv.updateBytes(NV_SITE_JD_BASE, &ut1, JulianDateSize);
-  }
-  nv.readBytes(NV_SITE_JD_BASE, &ut1, JulianDateSize);
-  if (ut1.day < 2451544.5 || ut1.day > 2816787.5) { ut1.day = 2451544.5; initError.value = true; DLF("ERR: Site::readJD(), bad NV julian date (day)"); }
-  if (ut1.hour < 0.0 || ut1.hour > 24.0)  { ut1.hour = 0.0; initError.value = true; DLF("ERR: Site::readJD(), bad NV julian date (hour)"); }
+  if (!nv().kv().getOrInit("DATE_TIME", ut1)) { DLF("WRN: Nv, init failed for DATE_TIME"); }
+  ut1.day = constrain(ut1.day, 2451544.5, 2816787.5);
+  ut1.hour = constrain(ut1.hour, 0, 24);
 }
 
 // reads the location information from NV
 // locationNumber can be 0..3
-void Site::readLocation(uint8_t number) {
-  if (LocationSize < sizeof(Location)) { nv.initError = true; DL("ERR: Site::readLocation(), LocationSize error"); }
-  if (!nv.hasValidKey()) {
-    VLF("MSG: Mount, site writing default sites 0-3 to NV");
-    location.latitude = 0.0;
-    location.longitude = 0.0;
-    location.timezone = 0.0;
-    strcpy(location.name, "");
-    for (uint8_t l = 0; l < 4; l++) nv.updateBytes(NV_SITE_BASE + l*LocationSize, &location, LocationSize);
-  }
-  locationNumber = number;
-  nv.readBytes(NV_SITE_BASE + locationNumber*LocationSize, &location, LocationSize);
-  if (location.latitude < -Deg90 || location.latitude > Deg90) { location.latitude = 0.0; initError.value = true; DLF("ERR: Site::readSite, bad NV latitude"); }
-  if (location.longitude < -Deg360 || location.longitude > Deg360) { location.longitude = 0.0; initError.value = true; DLF("ERR: Site::readSite, bad NV longitude"); }
-  if (location.timezone < -14 || location.timezone > 12) { location.timezone = 0.0; initError.value = true; DLF("ERR: Site::readSite,  bad NV timeZone"); }
+void Site::readLocation(uint8_t n) {
+  if (n > 3) return;
+
+  locationNumber = n;
+  location.latitude = 0.0;
+  location.longitude = 0.0;
+  location.timezone = 0.0;
+  location.elevation = 100.0;
+  strcpy(location.name, "");
+
+  char keyStr[26];
+  snprintf(keyStr, sizeof(keyStr), "LOCATION%u_SETTINGS", locationNumber);
+  nvKey[locationNumber] = nv().kv().computeKey(keyStr);
+  if (!nv().kv().getOrInit(nvKey[locationNumber], location)) { DF("WRN: Nv, init failed for "); VL(keyStr); }
+
+  location.latitude = constrain(location.latitude, -Deg90, Deg90);
+  location.longitude = constrain(location.longitude, -Deg360, Deg360);
+  location.elevation = constrain(location.elevation, -418, 8848); // in meters
+  location.timezone = constrain(location.timezone, -14, 12);
 }
 
 // sets the site altitude in meters

@@ -46,8 +46,8 @@ class Telescope {
     // update the location for time keeping and coordinate conversion
     void updateSite();
 
-    // handle observatory commands
-    bool command(char reply[], char command[], char parameter[], bool *supressFrame, bool *numericReply, CommandError *commandError);
+    // handle commands
+    bool command(char reply[], char command[], char parameter[], bool *suppressFrame, bool *numericReply, CommandError *commandError);
 
     void statusInit();
 

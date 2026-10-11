@@ -6,6 +6,7 @@
 #ifdef MOUNT_PRESENT
 
 #include "../../lib/tasks/OnTask.h"
+#include "../../lib/nv/Nv.h"
 
 #include "site/Site.h"
 #include "coordinates/Transform.h"
@@ -13,8 +14,9 @@
 #include "guide/Guide.h"
 #include "limits/Limits.h"
 #include "park/Park.h"
+#include "startupAuthority/StartupAuthority.h"
 
-bool Mount::command(char *reply, char *command, char *parameter, bool *supressFrame, bool *numericReply, CommandError *commandError) {
+bool Mount::command(char *reply, char *command, char *parameter, bool *suppressFrame, bool *numericReply, CommandError *commandError) {
   char *conv_end;
   PrecisionMode precisionMode = PM_HIGH;
 
@@ -27,7 +29,10 @@ bool Mount::command(char *reply, char *command, char *parameter, bool *supressFr
       if (parameter[0] == 'H') precisionMode = PM_HIGHEST; else if (parameter[0] != 0) { *commandError = CE_PARAM_FORM; return true; }
       double a = getPosition(CR_MOUNT_ALT).a;
       #if AXIS1_SECTOR_GEAR == OFF && AXIS2_TANGENT_ARM == OFF
-        if (guide.state == GU_HOME_GUIDE || guide.state == GU_HOME_GUIDE_ABORT) a = home.getPosition(CR_MOUNT_ALT).a;
+        if (guide.state == GU_HOME_GUIDE || guide.state == GU_HOME_GUIDE_ABORT) {
+          Coordinate homePosition = home.getPosition(CR_MOUNT_ALT);
+          a = transform.mountToNative(&homePosition).a;
+        }
       #endif
       convert.doubleToDms(reply, radToDeg(a), false, true, precisionMode);
       *numericReply = false;
@@ -40,7 +45,10 @@ bool Mount::command(char *reply, char *command, char *parameter, bool *supressFr
       if (parameter[0] == 'H' || parameter[0] == 'e') precisionMode = PM_HIGHEST; else if (parameter[0] != 0) { *commandError = CE_PARAM_FORM; return true; }
       double d = getPosition().d;
       #if AXIS1_SECTOR_GEAR == OFF && AXIS2_TANGENT_ARM == OFF
-        if (guide.state == GU_HOME_GUIDE || guide.state == GU_HOME_GUIDE_ABORT) d = home.getPosition().d;
+        if (guide.state == GU_HOME_GUIDE || guide.state == GU_HOME_GUIDE_ABORT) {
+          Coordinate homePosition = home.getPosition();
+          d = transform.mountToNative(&homePosition).d;
+        }
       #endif
       convert.doubleToDms(reply, radToDeg(d), false, true, precisionMode);
       *numericReply = false;
@@ -53,7 +61,10 @@ bool Mount::command(char *reply, char *command, char *parameter, bool *supressFr
       if (parameter[0] == 'H' || parameter[0] == 'a') precisionMode = PM_HIGHEST; else if (parameter[0] != 0) { *commandError = CE_PARAM_FORM; return true; }
       double r = getPosition().r;
       #if AXIS1_SECTOR_GEAR == OFF && AXIS2_TANGENT_ARM == OFF
-        if (guide.state == GU_HOME_GUIDE || guide.state == GU_HOME_GUIDE_ABORT) r = home.getPosition().r;
+        if (guide.state == GU_HOME_GUIDE || guide.state == GU_HOME_GUIDE_ABORT) {
+          Coordinate homePosition = home.getPosition();
+          r = transform.mountToNative(&homePosition).r;
+        }
       #endif
       convert.doubleToHms(reply, radToHrs(r), false, precisionMode);
       *numericReply = false;
@@ -89,18 +100,13 @@ bool Mount::command(char *reply, char *command, char *parameter, bool *supressFr
       // :GXE[m]#   Get mount setting
       //            Returns: n#
       if (parameter[0] == 'E')  {
-        uint16_t axesToRevert;
         switch (parameter[1]) {
           case '4': sprintf(reply, "%ld", lround(axis1.getStepsPerMeasure()/RAD_DEG_RATIO)); *numericReply = false; break;
           case '5': sprintf(reply, "%ld", lround(axis2.getStepsPerMeasure()/RAD_DEG_RATIO)); *numericReply = false; break;
-          case 'E': reply[0] = '0' + (MOUNT_COORDS - 1); *supressFrame = true; *numericReply = false; break;
+          case 'E': reply[0] = '0' + (MOUNT_COORDS - 1); *suppressFrame = true; *numericReply = false; break;
           case 'F': if (AXIS2_TANGENT_ARM != ON) *commandError = CE_0; break;
           case 'G': if (AXIS1_SECTOR_GEAR != ON) *commandError = CE_0; break;
-          case 'M':
-            axesToRevert = nv.readUI(NV_AXIS_SETTINGS_REVERT);
-            if (axesToRevert & 1) sprintf(reply, "%d", (int)nv.readUC(NV_MOUNT_TYPE_BASE)); else strcpy(reply, "0");
-            *numericReply = false;
-          break;
+          case 'M': sprintf(reply, "%d", (int)settings.mountType); *numericReply = false; break;
         default:
           return false;
         }
@@ -150,7 +156,10 @@ bool Mount::command(char *reply, char *command, char *parameter, bool *supressFr
       if (parameter[0] == 'H') precisionMode = PM_HIGHEST; else if (parameter[0] != 0) { *commandError = CE_PARAM_FORM; return true; }
       double z = getPosition(CR_MOUNT_HOR).z;
       #if AXIS1_SECTOR_GEAR == OFF && AXIS2_TANGENT_ARM == OFF
-        if (guide.state == GU_HOME_GUIDE || guide.state == GU_HOME_GUIDE_ABORT) z = home.getPosition(CR_MOUNT_HOR).z;
+        if (guide.state == GU_HOME_GUIDE || guide.state == GU_HOME_GUIDE_ABORT) {
+          Coordinate homePosition = home.getPosition(CR_MOUNT_ALT);
+          z = transform.mountToNative(&homePosition).z;
+        }
       #endif
       convert.doubleToDms(reply, NormalizeAzimuth(radToDeg(z)), true, false, precisionMode);
       *numericReply = false;
@@ -175,42 +184,82 @@ bool Mount::command(char *reply, char *command, char *parameter, bool *supressFr
       } else *commandError = CE_PARAM_RANGE;
     } else
 
-    //  :SEO#         Set encoder origin (for Encoder Bridge) also resets OnStep
+    //  :SEO#         Set coordinate origin for absolute encoders or mount coordinate memory
     //                Return: 0 on failure
     //                        1 on success
     if (command[1] == 'E' && parameter[0] == 'O' && parameter[1] == 0) {
-      #ifdef SERVO_MOTOR_PRESENT
-        #if AXIS1_ENCODER != OFF && AXIS2_ENCODER != OFF
+      if (park.state == PS_PARKED) { *commandError = CE_PARKED; return true; }
+      if (!mount.isTracking() && !mount.isSlewing()) {
+        bool handled = false;
 
-          if (!mount.isTracking() && !mount.isSlewing()) {
-            VLF("MSG: Mount, setting absolute encoder origin");
+        #ifdef HAS_ABSOLUTE_ENCODER_SERVO
+          handled = true;
+          VLF("MSG: Mount, setting absolute encoder origin");
 
-            #if AXIS1_ENCODER == SERIAL_BRIDGE && AXIS2_ENCODER == SERIAL_BRIDGE && defined(SERIAL_ENCODER)
-              SERIAL_ENCODER.print(":SO#");
-            #else
-              uint32_t zero = (uint32_t)axis1.motor->encoderZero();
-              V("MSG: Mount, absolute encoder saving AXIS1_ENCODER_OFFSET "); V(uint32_t(zero)); VLF(" to NV/EEPROM");
-              nv.write(NV_AXIS_ENCODER_ZERO_BASE, zero);
-              zero = (uint32_t)axis2.motor->encoderZero();
-              V("MSG: Mount, absolute encoder saving AXIS2_ENCODER_OFFSET "); V(uint32_t(zero)); VLF(" to NV/EEPROM");
-              nv.write(NV_AXIS_ENCODER_ZERO_BASE + 4, zero);
-            #endif
+          #if AXIS1_ENCODER == SERIAL_BRIDGE && AXIS2_ENCODER == SERIAL_BRIDGE && defined(SERIAL_ENCODER)
+            SERIAL_ENCODER.print(":SO#");
+          #else
+            uint32_t zero = (uint32_t)axis1.motor->encoderZero();
+            KvPartition::Status axis1Status = nv().kv().put("AXIS1_ENCODER_ORIGIN", zero);
+            if (axis1Status == KvPartition::Status::Ok) {
+              V("MSG: Mount, absolute encoder saved AXIS1_ENCODER_ORIGIN "); V(uint32_t(zero)); VLF(" to NV/EEPROM");
+            } else {
+              DLF("WRN: Mount, absolute encoder failed saving AXIS1_ENCODER_ORIGIN to NV/EEPROM");
+              *commandError = CE_0;
+            }
 
-            #ifdef HAL_RESET
-              delay(100);
+            zero = (uint32_t)axis2.motor->encoderZero();
+            KvPartition::Status axis2Status = nv().kv().put("AXIS2_ENCODER_ORIGIN", zero);
+            if (axis2Status == KvPartition::Status::Ok) {
+              V("MSG: Mount, absolute encoder saved AXIS2_ENCODER_ORIGIN "); V(uint32_t(zero)); VLF(" to NV/EEPROM");
+            } else {
+              DLF("WRN: Mount, absolute encoder failed saving AXIS2_ENCODER_ORIGIN to NV/EEPROM");
+              *commandError = CE_0;
+            }
+          #endif
+
+          #ifdef HAL_RESET
+            if (*commandError == CE_NONE) {
               enable(false);
-              VLF("MSG: Mount, resetting OnStep...");
-              nv.wait();
-              tasks.yield(1000);
-              HAL_RESET();
-            #endif
+              VLF("MSG: Mount, flushing NV/EEPROM before reset...");
+              bool flushOk = !nv().active().hasCommit() || nv().active().commit() == NvDevice::IoStatus::Ok;
+              const uint32_t startMs = millis();
+              const uint32_t timeoutMs = 5000;
+              while (flushOk && !nv().active().commitDone() && (uint32_t)(millis() - startMs) < timeoutMs) { tasks.yield(1); }
+              if (flushOk && nv().active().commitDone()) {
+                VLF("MSG: Mount, resetting OnStep...");
+                tasks.yield(1000);
+                HAL_RESET();
+              } else {
+                DLF("WRN: Mount, NV/EEPROM flush failed or timed out; reset cancelled");
+                *commandError = CE_0;
+              }
+            }
+          #endif
+        #endif
 
-          } else {
-            *commandError = CE_0;
-            DLF("MSG: Mount, setting absolute encoder origin failed; the mount is in motion!");
+        #if MOUNT_COORDS_MEMORY == ON
+          if (!handled && !goTo.absoluteEncodersPresent) {
+            CommandError e = home.reset(true, true);
+            if (e != CE_NONE) { *commandError = e; return true; }
+
+            limits.enabled(site.isDateTimeReady() && startupAuthority.trusted());
+
+            syncFromOnStepToEncoders = true;
+            handled = true;
+
+            VLF("MSG: Mount, setting mount coordinate memory origin");
           }
         #endif
-      #endif
+
+        if (!handled) {
+          *commandError = CE_0;
+          DLF("MSG: Mount, setting coordinate origin failed; feature unavailable");
+        }
+      } else {
+        *commandError = CE_0;
+        DLF("MSG: Mount, setting coordinate origin failed; the mount is in motion!");
+      }
     } else
 
     if (command[1] == 'X') {
@@ -226,19 +275,19 @@ bool Mount::command(char *reply, char *command, char *parameter, bool *supressFr
 
         switch (parameter[1]) {
 
-          // set encoder Axis1 value
+          // stage encoder Axis1 value (depreciated)
           case '0':
             d = strtod(&parameter[3], &conv_end);
             if (&parameter[3] != conv_end && fabs(d) <= 360.0L) { encoderAxis1 = degToRad(d); } else { encoderAxis1 = NAN; *commandError = CE_PARAM_RANGE; }
           break;
 
-          // set encoder Axis2 value
+          // stage encoder Axis2 value (depreciated)
           case '1':
             d = strtod(&parameter[3], &conv_end);
             if (&parameter[3] != conv_end && fabs(d) <= 360.0L) { encoderAxis2 = degToRad(d); } else { encoderAxis2 = NAN; *commandError = CE_PARAM_RANGE; }
           break;
 
-          // sync from encoder values
+          // sync from encoder values (depreciated)
           case '2':
             if (parameter[3] == '1' && parameter[4] == 0) {
               #if GOTO_FEATURE == ON
@@ -246,22 +295,32 @@ bool Mount::command(char *reply, char *command, char *parameter, bool *supressFr
                 if (e != CE_NONE) { *commandError = e; return true; }
               #endif
               if (isnan(encoderAxis1) || isnan(encoderAxis2) || syncFromOnStepToEncoders) { *commandError = CE_0; return true; }
-              axis1.setInstrumentCoordinate(encoderAxis1);
-              axis2.setInstrumentCoordinate(encoderAxis2);
+              *commandError = limits.validateInstrumentCoordinate(1, encoderAxis1, true);
+              if (*commandError == CE_NONE) *commandError = limits.validateInstrumentCoordinate(2, encoderAxis2, true);
+              if (*commandError != CE_NONE) return true;
+              *commandError = limits.setInstrumentCoordinate(1, encoderAxis1, true);
+              if (*commandError == CE_NONE) *commandError = limits.setInstrumentCoordinate(2, encoderAxis2, true);
+              if (*commandError != CE_NONE) return true;
             }
           break;
 
           // allow sws to control sync mode
           case '3': syncFromOnStepToEncoders = false; break;
 
-          // set and sync encoder Axis1 and Axis2 values
+          // set and sync from encoder Axis1 and Axis2 values
+          // append 'a' if both SWS encoder values are absolute and trusted
           case '4': {
+            bool absoluteAuthority = false;
             d = strtod(&parameter[3], &conv_end);
             if (&parameter[3] != conv_end && fabs(d) <= 360.0L) { encoderAxis1 = degToRad(d); } else { encoderAxis1 = NAN; }
 
             char *parameter2 = strchr(&parameter[3], ','); parameter2++;
             d = strtod(parameter2, &conv_end);
-            if (parameter2 != conv_end && fabs(d) <= 360.0L) { encoderAxis2 = degToRad(d); } else { encoderAxis2 = NAN; }
+            if (parameter2 != conv_end && fabs(d) <= 360.0L) {
+              encoderAxis2 = degToRad(d);
+              if (conv_end[0] == 'a' && conv_end[1] == 0) absoluteAuthority = true; else
+              if (conv_end[0] != 0) encoderAxis2 = NAN;
+            } else { encoderAxis2 = NAN; }
 
             #if GOTO_FEATURE == ON
               CommandError e = goTo.validate();              
@@ -274,72 +333,20 @@ bool Mount::command(char *reply, char *command, char *parameter, bool *supressFr
                  (goTo.state != GS_NONE && goTo.stage != GG_NEAR_DESTINATION_WAIT) ||
                  guide.state != GU_NONE) { *commandError = CE_0; return true; }
 
-            axis1.setInstrumentCoordinate(encoderAxis1);
-            axis2.setInstrumentCoordinate(encoderAxis2);
+            *commandError = limits.validateInstrumentCoordinate(1, encoderAxis1, true);
+            if (*commandError == CE_NONE) *commandError = limits.validateInstrumentCoordinate(2, encoderAxis2, true);
+            if (*commandError != CE_NONE) return true;
+            *commandError = limits.setInstrumentCoordinate(1, encoderAxis1, true);
+            if (*commandError == CE_NONE) *commandError = limits.setInstrumentCoordinate(2, encoderAxis2, true);
+            if (*commandError != CE_NONE) return true;
+            if (absoluteAuthority) {
+              captureNominalIndexPositions();
+              startupAuthority.setTrusted(true);
+              goTo.absoluteEncodersPresent = true;
+              goTo.encodersPresent = true;
+              VLF("MSG: Mount, sync from trusted paired absolute SWS encoders");
+            }
           break; }
-
-          #ifdef ABSOLUTE_ENCODER_CALIBRATION
-            // :SX4E,[option]# Calibrate encoder
-            //              Return: 0 on failure
-            //                      1 on success
-            case 'E':
-              if (parameter[4] == 0) {
-                switch (parameter[3]) {
-                  case 'W': // stop and [W]rite data                   :SX4E,W#
-                    axis1.motor->calibrate(0);
-                    tracking(false);
-                  break;
-                  case 'R': // start [R]ecording                       :SX4E,R#
-                    if (limits.isEnabled() && isTracking()) {
-                      axis1.motor->calibrate(1);
-                    } else {
-                      if (!limits.isEnabled()) { DL("NOT ENABLED!"); }
-                      if (!isTracking()) { DL("NOT TRACKING!"); }
-                      *commandError = CE_SLEW_ERR_UNSPECIFIED;
-                    }
-                  break;
-                  case 'T': // [T]rack normally                        :SX4E,T#
-                    axis1.motor->calibrate(2);
-                  break;
-                  case 'F': // [F]ixed rate tracking (enc corrected)   :SX4E,F#
-                    if (limits.isEnabled() && isTracking()) {
-                      axis1.motor->calibrate(3);
-                    } else {
-                      *commandError = CE_SLEW_ERR_UNSPECIFIED;
-                    }
-                  break;
-                  case '!': // [!] erase buffer and any recorded data  :SX4E,!#
-                    axis1.motor->calibrate(4);
-                  break;
-                  case 'H': // Apply [H]igh pass filter to buffer      :SX4E,H#
-                    axis1.motor->calibrate(5);
-                  break;
-                  case 'A': // [A]pply low pass filter to buffer       :SX4E,A#
-                    axis1.motor->calibrate(12);
-                  break;
-                  case 'C': // [C]lear buffer (only)                   :SX4E,C#
-                    axis1.motor->calibrate(6);
-                  break;
-                  case 'L': // [L]oad                                  :SX4E,L#
-                    axis1.motor->calibrate(7);
-                  break;
-                  case 'S': // [S]ave                                  :SX4E,S#
-                    axis1.motor->calibrate(8);
-                  break;
-                  case 'P': // [P]rint buffer                          :SX4E,P#
-                    axis1.motor->calibrate(9);
-                  break;
-                  case 'B': // save buffer to [B]ackup file            :SX4E,B#
-                    axis1.motor->calibrate(10);
-                  break;
-                  case 'V': // reco[V]er from backup file              :SX4E,V#
-                    axis1.motor->calibrate(11);
-                  break;
-                  default: *commandError = CE_CMD_UNKNOWN; break;
-                }
-              }
-            break;
-          #endif
 
           default: *commandError = CE_CMD_UNKNOWN; break;
         }
@@ -349,12 +356,13 @@ bool Mount::command(char *reply, char *command, char *parameter, bool *supressFr
       //              Return: 0 on failure
       //                      1 on success
       if (parameter[0] == 'E' && parameter[1] == 'M') {
-        long l = atol(&parameter[3]);
-        if (l == 0 ||
-            (l == GEM && AXIS1_WRAP == OFF) ||
-            (l == FORK && AXIS1_WRAP == OFF) ||
-            (l == ALTAZM && AXIS2_TANGENT_ARM == OFF)) {
-          nv.write(NV_MOUNT_TYPE_BASE, (uint8_t)l);
+        long mountType = atol(&parameter[3]);
+        if (mountType == 0 ||
+            (mountType == GEM && AXIS1_WRAP == OFF) ||
+            (mountType == FORK && AXIS1_WRAP == OFF) ||
+            (mountType == ALTAZM && AXIS2_TANGENT_ARM == OFF)) {
+          settings.mountType = mountType;
+          nv().kv().put(nvKey, settings);
         } else *commandError = CE_PARAM_RANGE;
       } else
 
@@ -414,23 +422,21 @@ bool Mount::command(char *reply, char *command, char *parameter, bool *supressFr
       if (settings.rc == RC_REFRACTION) settings.rc = RC_REFRACTION_DUAL; else
       if (settings.rc == RC_MODEL) settings.rc = RC_MODEL_DUAL;
     } else
-    if (command[1] == 'S') { settings.rc = RC_NONE; trackingRate = hzToSidereal(60.0F); } else
-    if (command[1] == 'K') { settings.rc = RC_NONE; trackingRate = hzToSidereal(60.136F); } else
-    if (command[1] == 'L') { settings.rc = RC_NONE; trackingRate = hzToSidereal(57.9F); } else
+    if (command[1] == 'S') { trackingRate = hzToSidereal(SOLAR_RATE_HZ); } else
+    if (command[1] == 'K') { trackingRate = hzToSidereal(KING_RATE_HZ); } else
+    if (command[1] == 'L') { trackingRate = hzToSidereal(LUNAR_RATE_HZ); } else
     if (command[1] == 'Q') { trackingRate = hzToSidereal(SIDEREAL_RATE_HZ); } else
     if (command[1] == '+') { site.setSiderealPeriod(site.getSiderealPeriod() - hzToSubMicros(0.02F)); } else
     if (command[1] == '-') { site.setSiderealPeriod(site.getSiderealPeriod() + hzToSubMicros(0.02F)); } else
     if (command[1] == 'R') { site.setSiderealPeriod(SIDEREAL_PERIOD); } else
     if (command[1] == 'e') {
-      if (transform.isEquatorial() || site.isDateTimeReady()) {
-        #if GOTO_FEATURE == ON
-          if (park.state != PS_PARKED) tracking(true); else *commandError = CE_PARKED;
-        #else
-          tracking(true);
-        #endif
-      } else {
-        *commandError = CE_REPLY_UNKNOWN;
-      }
+      #if GOTO_FEATURE == ON
+        if (park.state != PS_PARKED) {
+      #endif
+      tracking(true);
+      #if GOTO_FEATURE == ON
+        } else *commandError = CE_PARKED;
+      #endif
     } else
     if (command[1] == 'd') {
       tracking(false);
@@ -443,8 +449,7 @@ bool Mount::command(char *reply, char *command, char *parameter, bool *supressFr
 
     if (*commandError == CE_NONE) {
       switch (command[1]) { case 'S': case 'K': case 'L': case 'Q': case '+': case '-': case 'R': *numericReply = false; }
-      switch (command[1]) { case 'o': case 'r': case 'n': trackingRate = hzToSidereal(SIDEREAL_RATE_HZ); }
-      nv.updateBytes(NV_MOUNT_SETTINGS_BASE, &settings, sizeof(MountSettings));
+      nv().kv().put(nvKey, settings);
       update();
     }
   } else
@@ -464,12 +469,12 @@ bool Mount::command(char *reply, char *command, char *parameter, bool *supressFr
         if (parameter[0] == 'D') {
           settings.backlash.axis2 = arcsecToRad(arcSecs);
           axis2.setBacklash(settings.backlash.axis2);
-          nv.updateBytes(NV_MOUNT_SETTINGS_BASE, &settings, sizeof(MountSettings));
+          nv().kv().put(nvKey, settings);
         } else
         if (parameter[0] == 'R') {
           settings.backlash.axis1 = arcsecToRad(arcSecs);
           axis1.setBacklash(settings.backlash.axis1);
-          nv.updateBytes(NV_MOUNT_SETTINGS_BASE, &settings, sizeof(MountSettings));
+          nv().kv().put(nvKey, settings);
         } else *commandError = CE_CMD_UNKNOWN;
       } else *commandError = CE_PARAM_RANGE;
     } else *commandError = CE_PARAM_FORM;
@@ -485,14 +490,14 @@ bool Mount::command(char *reply, char *command, char *parameter, bool *supressFr
         int arcSec = round(radToArcsec(settings.backlash.axis2));
         if (arcSec < 0) arcSec = 0;
         if (arcSec > 3600) arcSec = 3600;
-        sprintf(reply,"%d", arcSec);
+        sprintf(reply, "%d", arcSec);
         *numericReply = false;
     } else
     if (parameter[0] == 'R') {
         int arcSec = round(radToArcsec(settings.backlash.axis1));
         if (arcSec < 0) arcSec = 0;
         if (arcSec > 3600) arcSec = 3600;
-        sprintf(reply,"%d", arcSec);
+        sprintf(reply, "%d", arcSec);
         *numericReply = false;
     } else *commandError = CE_CMD_UNKNOWN;
   } else return false;

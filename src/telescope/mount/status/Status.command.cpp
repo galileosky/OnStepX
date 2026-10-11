@@ -5,9 +5,12 @@
 
 #if defined(MOUNT_PRESENT)
 
+#include "../../../lib/nv/Nv.h"
+
+#include "../../../lib/tls/PPS.h"
+
 #include "../Mount.h"
 #include "../coordinates/Transform.h"
-#include "../../../lib/tls/PPS.h"
 #include "../goto/Goto.h"
 #include "../guide/Guide.h"
 #include "../home/Home.h"
@@ -15,9 +18,10 @@
 #include "../pec/Pec.h"
 #include "../limits/Limits.h"
 #include "../status/Status.h"
+#include "../startupAuthority/StartupAuthority.h"
 
-bool Status::command(char *reply, char *command, char *parameter, bool *supressFrame, bool *numericReply, CommandError *commandError) {
-  UNUSED(supressFrame);
+bool Status::command(char *reply, char *command, char *parameter, bool *suppressFrame, bool *numericReply, CommandError *commandError) {
+  UNUSED(suppressFrame);
 
   if (command[0] == 'G') {
     // :Gm#       Gets the meridian pier-side
@@ -64,7 +68,8 @@ bool Status::command(char *reply, char *command, char *parameter, bool *supressF
       }
 
       if (goTo.isHomePaused())                 reply[i++]='w';                     // [w]aiting at home 
-      if (goTo.isHomePauseEnabled())           reply[i++]='u';                     // Pa[u]se at home enabled?
+      if (goTo.getHomeMode() == MFHM_VISIT)    reply[i++]='v';                     // [v]isit home mode
+      if (goTo.getHomeMode() == MFHM_PAUSE)    reply[i++]='u';                     // Pa[u]se at home mode
       if (sound.enabled)                       reply[i++]='z';                     // Bu[z]zer enabled?
       if (goTo.isAutoFlipEnabled())            reply[i++]='a';                     // [a]uto meridian flip
       #if AXIS1_PEC == ON
@@ -86,7 +91,7 @@ bool Status::command(char *reply, char *command, char *parameter, bool *supressF
       reply[i++]='0' + guide.settings.pulseRateSelect;                             // Provide pulse-guide rate
       reply[i++]='0' + guide.settings.axis1RateSelect;                             // Provide guide rate
 
-      reply[i++]='0' + limits.errorCode();                                         // Provide general error code
+      reply[i++]='0' + mountStatus.errorCode();                                    // Provide general error code
       reply[i++]=0;
 
       *numericReply = false;
@@ -116,11 +121,14 @@ bool Status::command(char *reply, char *command, char *parameter, bool *supressF
 
       if (mount.syncFromOnStepToEncoders)          reply[1]|=0b10000100;           // Sync to encoders only
       if (guide.active())                          reply[1]|=0b10001000;           // Guide active
+      if (startupAuthority.trusted())              reply[1]|=0b10010000;           // Startup authority trusted
+      if (goTo.getHomeMode() == MFHM_VISIT)        reply[1]|=0b10100000;           // Meridian flip visit home mode
+      if (goTo.getHomeMode() == MFHM_PAUSE)        reply[1]|=0b11000000;           // Meridian flip pause at home mode
       if (mount.isHome())                          reply[2]|=0b10000001;           // At home
       if (home.state == HS_HOMING)                 reply[2]|=0b10100000;           // Slewing home
       if (home.settings.automaticAtBoot)           reply[2]|=0b11000000;           // Auto home at boot
       if (goTo.isHomePaused())                     reply[2]|=0b10000010;           // Waiting at home
-      if (goTo.isHomePauseEnabled())               reply[2]|=0b10000100;           // Pause at home enabled?
+      if (goTo.isHomePauseEnabled())               reply[2]|=0b10000100;           // Pause at home mode (legacy status bit)
       if (sound.enabled)                           reply[2]|=0b10001000;           // Buzzer enabled?
       if (goTo.isAutoFlipEnabled())                reply[2]|=0b10010000;           // Auto meridian flip
 
@@ -143,7 +151,7 @@ bool Status::command(char *reply, char *command, char *parameter, bool *supressF
       reply[5] = (int)park.state|0b10000000;                                       // Park state: 0 not parked, 1 parking in-progress, 2 parked, 3 park failed
       reply[6] = (int)guide.settings.pulseRateSelect|0b10000000;                   // Pulse-guide selection
       reply[7] = (int)guide.settings.axis1RateSelect|0b10000000;                   // Guide selection
-      reply[8] = limits.errorCode()|0b10000000;                                    // General error
+      reply[8] = mountStatus.errorCode()|0b10000000;                               // General error
       reply[9] = 0;
       *numericReply = false;
     } else
@@ -173,7 +181,8 @@ bool Status::command(char *reply, char *command, char *parameter, bool *supressF
       case '0': case '1':
         sound.enabled = parameter[3] - '0';
         #if STATUS_BUZZER_MEMORY == ON
-          nv.write(NV_MOUNT_STATUS_BASE, (uint8_t)sound.enabled);
+          settings.soundEnabled = sound.enabled;
+          nv().kv().put("STATUS_SETTINGS", settings);
         #endif
       break;
       case '2':

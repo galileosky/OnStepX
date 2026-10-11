@@ -2,9 +2,14 @@
 // OnStepX telescope control
 
 #include "../Common.h"
-#include "../lib/tasks/OnTask.h"
 
+#include "../lib/tasks/OnTask.h"
+#include "../lib/gpioEx/GpioEx.h"
+#include "../lib/nv/Nv.h"
+#include "../lib/analog/Analog.h"
 #include "../lib/convert/Convert.h"
+#include "../lib/canPlus/CanPlus.h"
+
 #include "../libApp/commands/ProcessCmds.h"
 #include "../libApp/weather/Weather.h"
 #include "../libApp/temperature/Temperature.h"
@@ -35,6 +40,10 @@ void mcuTempWrapper() { telescope.mcuTemperature = (telescope.mcuTemperature*9.0
   void statusFlash() {
     static uint8_t cycle = 0;
     if (cycle++ > 16) cycle = 0;
+
+    #if GPIO_DEVICE != OFF
+      if (gpio.lateInitError) initError.gpio = true;
+    #endif
 
     // show only the most severe error (in order)
     uint8_t flashes = 0;
@@ -106,24 +115,105 @@ Telescope::Telescope() {
 }
 
 void Telescope::init(const char *fwName, int fwMajor, int fwMinor, const char *fwPatch, int fwConfig) {
-  strcpy(firmware.name, fwName);
+  sstrcpy(firmware.name, fwName);
   firmware.version.major = fwMajor;
   firmware.version.minor = fwMinor;
-  strcpy(firmware.version.patch, fwPatch);
+  sstrcpy(firmware.version.patch, fwPatch);
   firmware.version.config = fwConfig;
-  strcpy(firmware.date, __DATE__);
-  strcpy(firmware.time, __TIME__);
+  sstrcpy(firmware.date, __DATE__);
+  sstrcpy(firmware.time, __TIME__);
 
-  if (!nv.isKeyValid(INIT_NV_KEY)) {
-    if (!nv.initError) {
-      VF("MSG: NV, invalid key wipe "); V(nv.size); VLF(" bytes");
-      if (nv.verify()) { VLF("MSG: NV, ready for reset to defaults"); }
+  // --------------------------------------------------------------------------------------------------
+  // start the NV/EEPROM subsystem for settings storage
+  initError.nv = false;
+  initError.value = false;
+  bool success = nv().init();
+  NvVolume &nvVolume = nv().volume();
+
+  success = success && (nvVolume.mount("OnStepX", NV_VOLUME_SIGNATURE) == NvVolume::Status::Ok);
+  VF("MSG: Nv, volume ");
+  if (success) { VLF("'OnStepX' mounted"); } else { VLF("invalid/unformatted"); }
+
+  if (!success) {
+
+    // automatic kv partition sizing
+    uint32_t vSize = nvVolume.byteCount() - 32;
+    uint32_t kvSize = vSize;
+    if (vSize > 1039) {
+
+      // start the volume format
+      success = nvVolume.formatBegin("OnStepX", NV_VOLUME_SIGNATURE) == NvVolume::Status::Ok;
+      if (success) { VF("MSG: Nv, volume 'OnStepX' format started ("); V(vSize); VLF(" bytes)"); }
+
+      // first add the KV partition
+           if (vSize < 1536) kvSize = 1040;     // 1080 class (no PEC/Lib)
+      else if (vSize < 3072) kvSize = 1536;     // 2KB class (~0.5K for Lib)
+      else if (vSize < 6144) kvSize = 2048;     // 4KB class (~2K for PEC/Lib)
+      else if (vSize < 16384) kvSize = 3072;    // 8KB class (~5K for PEC/Lib)
+      else kvSize = 4080;                       // and up
+
+      success = success && nvVolume.formatAddPartition("KV", kvSize);
+      if (success) { VF("MSG: Nv, volume format added 'KV' partition ("); V(kvSize); VLF(" bytes)"); }
+
+      // next any PEC partition
+      uint32_t pecSize = 0;
+      #if AXIS1_PEC == ON
+        pecSize = ((PEC_BUFFER_SIZE_LIMIT) >> 4) << 4;
+        if (kvSize + pecSize > vSize) { pecSize = 0; }
+
+        if (pecSize > 15) {
+          success = success && nvVolume.formatAddPartition("PEC", pecSize);
+          if (success) { VF("MSG: Nv, volume format added 'PEC' partition ("); V(pecSize); VLF(" bytes)"); }
+        }
+      #endif
+
+      // next any Library partition
+      uint32_t libSize = vSize - pecSize - kvSize;
+      if (libSize >= 16) {
+        success = success && nvVolume.formatAddPartition("LIBRARY", 0);
+        if (success) { VF("MSG: Nv, volume format added 'LIBRARY' partition ("); V(libSize); VLF(" bytes)"); }
+      }
+
+      // finally commit the volume format
+      success = success && (nvVolume.formatCommit() == NvVolume::Status::Ok);
+      if (success) { VLF("MSG: Nv, volume format done"); }
+
+      // try to mount the volume again
+      success = success && (nvVolume.mount("OnStepX", NV_VOLUME_SIGNATURE) == NvVolume::Status::Ok);
+      if (success) { VLF("MSG: Nv, volume 'OnStepX' mounted"); } else { DLF("WRN: Nv, volume 'OnStepX' mount FAILED!"); }
+
     } else {
-      DLF("WRN: NV, can't be accessed skipping verification!");
+      DLF("WRN: Nv, volume compatible storage device NOT FOUND!");
+      success = false;
     }
-  } else { VLF("MSG: NV, correct key found"); }
+  }
 
-  if (!gpio.init()) initError.gpio = true;
+  // Bind global KV instance to the KV partition index
+  success = success && (nv().kv().init(nvVolume, "KV") == KvPartition::Status::Ok);
+  if (success) { VLF("MSG: Nv, partition 'KV' mounted"); } else { DLF("WRN: Nv, partition 'KV' mount FAILED!"); }
+
+  if (!success) {
+    VLF("WRN: Nv, init FAILED!");
+    initError.nv = true;
+  }
+  nv().kv().resetInitErrorFlag();
+  // --------------------------------------------------------------------------------------------------
+
+  #if RETICLE_LED_DEFAULT >= 0 && RETICLE_LED_PIN != OFF
+    analog.pwmInit(RETICLE_LED_DEFAULT);
+  #endif
+
+  #ifdef USES_HW_SPI
+    SPI.begin();
+  #endif
+
+  #if CAN_PLUS != OFF
+    canPlus.init();
+  #endif
+
+  #if GPIO_DEVICE != OFF
+    if (!gpio.init()) initError.gpio = true;
+  #endif
 
   #ifdef SHARED_ENABLE_PIN
     pinModeEx(SHARED_ENABLE_PIN, OUTPUT);
@@ -144,8 +234,8 @@ void Telescope::init(const char *fwName, int fwMajor, int fwMinor, const char *f
 
   mcuTemperature = HAL_TEMP();
   if (!isnan(mcuTemperature)) {
-    VF("MSG: Telescope, start MCU temperature monitor task (rate 500ms priority 7)... ");
-    if (tasks.add(500, 0, true, 6, mcuTempWrapper, "McuTemp")) { VLF("success"); } else { VLF("FAILED!"); }
+    VF("MSG: System, start MCU temperature monitor task (rate 500ms priority 7)... ");
+    if (tasks.add(500, 0, true, 6, mcuTempWrapper, "SysTemp")) { VLF("success"); } else { VLF("FAILED!"); }
   }
   weather.init();
   temperature.init();
@@ -163,12 +253,16 @@ void Telescope::init(const char *fwName, int fwMajor, int fwMinor, const char *f
     mountStatus.init();
   #endif
 
-  #ifdef ROTATOR_PRESENT
+  #if defined(ROTATOR_PRESENT) || defined(ROTATOR_CLIENT_PRESENT)
     rotator.init();
   #endif
 
-  #ifdef FOCUSER_PRESENT
+  #if defined(FOCUSER_PRESENT) || defined(FOCUSER_CLIENT_PRESENT)
     focuser.init();
+  #endif
+
+  #if defined(FEATURES_PRESENT) || defined(FEATURES_CLIENT_PRESENT)
+    features.init();
   #endif
 
   delay(1000);
@@ -187,41 +281,28 @@ void Telescope::init(const char *fwName, int fwMajor, int fwMinor, const char *f
     mount.begin();
   #endif
 
-  #ifdef ROTATOR_PRESENT
+  #if defined(ROTATOR_PRESENT) || defined(ROTATOR_CLIENT_PRESENT)
     rotator.begin();
   #endif
 
-  #ifdef FOCUSER_PRESENT
+  #if defined(FOCUSER_PRESENT) || defined(FOCUSER_CLIENT_PRESENT)
     focuser.begin();
   #endif
 
-  #ifdef FEATURES_PRESENT
-    features.init();
+  #if defined(FEATURES_PRESENT) || defined(FEATURES_CLIENT_PRESENT)
+    features.begin();
   #endif
-
-  // write the default settings to NV
-  if (!nv.hasValidKey()) {
-    VLF("MSG: Telescope, writing defaults to NV");
-    nv.write(NV_TELESCOPE_SETTINGS_BASE, reticleBrightness);
-  }
-
-  // init is done, write the NV key if necessary
-  if (!nv.hasValidKey()) {
-    nv.writeKey((uint32_t)INIT_NV_KEY);
-    nv.wait();
-    if (!nv.isKeyValid(INIT_NV_KEY)) { DLF("ERR: NV, failed to read back key!"); } else { VLF("MSG: NV, reset complete"); }
-  }
-
-  initError.nv = nv.initError;
 
   #if RETICLE_LED_DEFAULT != OFF && RETICLE_LED_PIN != OFF
     #if RETICLE_LED_MEMORY == ON
-      reticleBrightness = nv.readI(NV_TELESCOPE_SETTINGS_BASE);
-      if (reticleBrightness < 0) reticleBrightness = RETICLE_LED_DEFAULT;
+      if (!nv().kv().getOrInit("TELESCOPE_SETTINGS", reticleBrightness)) { DLF("WRN: Nv, init failed for TELESCOPE_SETTINGS"); }
+      reticleBrightness = constrain(reticleBrightness, 0, 255);
     #endif
 
     pinMode(RETICLE_LED_PIN, OUTPUT);
-    analogWrite(RETICLE_LED_PIN, analog8BitToAnalogRange(reticleBrightness));
+
+    float duty = (float)reticleBrightness*(1.0F/255.0F);
+    analog.write(RETICLE_LED_PIN, RETICLE_LED_INVERT == ON ? duty : 1.0F - duty);
   #endif
 
   // bring up status LED and flash error codes
@@ -231,6 +312,23 @@ void Telescope::init(const char *fwName, int fwMajor, int fwMinor, const char *f
     VF("MSG: Telescope, start status LED task (rate 500ms priority 4)... ");
     if (tasks.add(500, 0, true, 4, statusFlash, "StaLed")) { VLF("success"); } else { VLF("FAILED!"); }
   #endif
+
+  // --------------------------------------------------------------------------------------------------
+  // init is done let the user see what's in the KV
+  #if DEBUG != OFF
+    KvPartition::Stats stats;
+    if (success && nv().kv().stats(stats) == KvPartition::Status::Ok) {
+      VF("MSG: Nv, partition 'KV' data blocks used = ");
+      V(stats.dataBlocksTotal - stats.dataBlocksFree); VF(" (of "); V(stats.dataBlocksTotal); VF(")");
+      VF(" key slots used = ");
+      V(stats.slotsTotal - stats.slotsFree); VF(" (of "); V(stats.slotsTotal); VLF(")");
+    }
+  #endif
+
+  // and capture any errors
+  if (nv().kv().getInitErrorFlag()) initError.nv = true;
+  // --------------------------------------------------------------------------------------------------
+
 }
 
 Telescope telescope;

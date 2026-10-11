@@ -33,17 +33,17 @@ class Guide {
   public:
     void init();
 
-    bool command(char *reply, char *command, char *parameter, bool *supressFrame, bool *numericReply, CommandError *commandError);
+    bool command(char *reply, char *command, char *parameter, bool *suppressFrame, bool *numericReply, CommandError *commandError);
 
     // start guide at a given direction and rate on Axis1
-    CommandError startAxis1(GuideAction guideAction, GuideRateSelect rateSelect, unsigned long guideTimeLimit);
+    CommandError startAxis1(GuideAction guideAction, GuideRateSelect rateSelect, unsigned long guideTimeLimit, bool pulseGuide = false);
 
     // stop guide on Axis1, use GA_BREAK to stop in either direction or specifiy the direction to be stopped GA_FORWARD or GA_REVERSE
     // set abort true to rapidly stop (broken limit, etc)
     void stopAxis1(GuideAction stopDirection = GA_BREAK, bool abort = false);
 
     // start guide at a given direction and rate on Axis2
-    CommandError startAxis2(GuideAction guideAction, GuideRateSelect rateSelect, unsigned long guideTimeLimit);
+    CommandError startAxis2(GuideAction guideAction, GuideRateSelect rateSelect, unsigned long guideTimeLimit, bool pulseGuide = false);
 
     // stop guide on Axis2, use GA_BREAK to stop in either direction or specifiy the direction to be stopped GA_FORWARD or GA_REVERSE
     // set abort true to rapidly stop (broken limit, etc)
@@ -90,6 +90,9 @@ class Guide {
     GuideSettings settings = { GR_HALF, GR_20X, GR_20X };
 
   private:
+    // apply the guide duration policy, including the safety limit used while soft limits are disabled
+    void finalizeTimeLimit(unsigned long &guideTimeLimit);
+
     // keep guide rate <= half max
     float limitGuideRate(float rate);
 
@@ -127,6 +130,7 @@ class Guide {
     unsigned long guideFinishTimeAxis1 = 0;
     unsigned long guideFinishTimeAxis2 = 0;
 
+    uint32_t nvKey;
 };
 
 extern Guide guide;

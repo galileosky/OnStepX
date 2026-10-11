@@ -3,7 +3,7 @@
 //
 // by Howard Dutton
 //
-// Copyright (C) 2012 to 2021 Howard Dutton
+// Copyright (C) 2012 to 2024 Howard Dutton
 //
 
 #include "Align.ref.h"
@@ -11,6 +11,7 @@
 #if defined(MOUNT_PRESENT) && !defined(HIGH_SPEED_ALIGN)
 
 #include "../../../lib/tasks/OnTask.h"
+#include "../../../lib/nv/Nv.h"
 
 #include "../coordinates/Transform.h"
 #include "../../Telescope.h"
@@ -34,9 +35,8 @@ void GeoAlign::init(int8_t mountType, float latitude) {
 }
 
 void GeoAlign::modelRead() {
-  // get misc settings from NV
-  if (AlignModelSize < sizeof(AlignModel)) { nv.initError = true; DL("ERR: GeoAlign::readModel(), AlignModelSize error"); }
-  nv.readBytes(NV_ALIGN_MODEL_BASE, &model, AlignModelSize);
+  if (!nv().kv().getOrInit("ALIGN_MODEL", model)) { DLF("WRN: Nv, init failed for ALIGN_MODEL"); }
+ 
   if (model.ax1Cor < -Deg360 || model.ax1Cor > Deg360) { model.ax1Cor = 0; DLF("ERR: GeoAlign::readModel(), bad NV ax1Cor"); }
   if (model.ax2Cor < -Deg360 || model.ax2Cor > Deg360) { model.ax2Cor = 0; DLF("ERR: GeoAlign::readModel(), bad NV ax2Cor"); }
   if (model.dfCor  <    -256 || model.dfCor  >    256) { model.dfCor  = 0; DLF("ERR: GeoAlign::readModel(), bad NV dfCor");  }
@@ -45,11 +45,14 @@ void GeoAlign::modelRead() {
   if (model.pdCor  <    -256 || model.pdCor  >    256) { model.pdCor  = 0; DLF("ERR: GeoAlign::readModel(), bad NV pdCor");  }
   if (model.altCor <  -16384 || model.altCor >  16384) { model.altCor = 0; DLF("ERR: GeoAlign::readModel(), bad NV altCor"); }
   if (model.azmCor <  -16384 || model.azmCor >  16384) { model.azmCor = 0; DLF("ERR: GeoAlign::readModel(), bad NV azmCor"); }
+  if (model.hcp    < -Deg360 || model.hcp    > Deg360) { model.hcp = 0;    DLF("ERR: GeoAlign::readModel(), bad NV hcp"); }
+  if (model.hca    <  -16384 || model.hca    > 16384)  { model.hca = 0;    DLF("ERR: GeoAlign::readModel(), bad NV hca"); }
+  if (model.dcp    < -Deg360 || model.dcp    > Deg360) { model.dcp = 0;    DLF("ERR: GeoAlign::readModel(), bad NV dcp"); }
+  if (model.dca    <  -16384 || model.dca    > 16384)  { model.dca = 0;    DLF("ERR: GeoAlign::readModel(), bad NV dca"); }
 }
 
 void GeoAlign::modelWrite() {
-  if (AlignModelSize < sizeof(AlignModel)) { nv.initError = true; DL("ERR: GeoAlign::writeModel(), AlignModelSize error"); }
-  nv.updateBytes(NV_ALIGN_MODEL_BASE, &model, AlignModelSize);
+  nv().kv().put("ALIGN_MODEL", model);
 }
 
 void GeoAlign::modelClear() {
@@ -62,6 +65,10 @@ void GeoAlign::modelClear() {
   model.pdCor  = 0;  // altitude axis/Azimuth orthogonal correction
   model.dfCor  = 0;  // altitude axis axis flex
   model.tfCor  = 0;  // tube flex
+  model.hcp    = 0;  // cos(Axis1) phase
+  model.hca    = 0;  // cos(Axis1) amplitude
+  model.dcp    = 0;  // cos(Axis2) phase
+  model.dca    = 0;  // cos(Axis2) amplitude
   modelIsReady = false;
 }
 
@@ -164,7 +171,7 @@ void GeoAlign::correct(float a1, float a2, float pierSide, float sf, float _deo,
   // ------------------------------------------------------------
   // Axis flex
   DF  = _df*sf;
-  DFd = -DF*(cosLat*cosA1+sinLat*tanA2);
+  DFd = -DF*(cosLat*cosA1 + sinLat*tanA2);
 
   // ------------------------------------------------------------
   // Fork flex
@@ -363,6 +370,11 @@ void GeoAlign::autoModel(int n) {
   model.ax1Cor = arcsecToRad(best_ohw);
   model.ax2Cor = arcsecToRad(best_odw);
 
+  model.hcp = 0;
+  model.hca = 0;
+  model.dcp = 0;
+  model.dca = 0;
+
   // update status and exit
   modelIsReady = true;
 
@@ -421,22 +433,28 @@ void GeoAlign::observedPlaceToMount(Coordinate *coord) {
       float TFh = model.tfCor*(cosLat*sinAx1*(1.0F/cosAx2));
       float TFd = model.tfCor*(cosLat*cosAx1*sinAx2 - sinLat*cosAx2);
 
+      // cos() linearization for main drive mechanism runout etc.
+      float COSh = cos(a1 + model.hcp)*model.hca*p;
+      float ia2 = a2;
+      if (p < 0.0F) ia2 = sinLat >= 0.0F ? Deg180 - a2 : -Deg180 - a2;
+      float COSd = cos(ia2 + model.dcp)*model.dca*p;
+
       // polar misalignment
       float ax1c = -model.azmCor*cosAx1*(sinAx2/cosAx2) + model.altCor*sinAx1*(sinAx2/cosAx2);
       float ax2c = +model.azmCor*sinAx1                 + model.altCor*cosAx1;
 
       // improved guess at instrument coordinate
-      a1 = ax1 + (ax1c + PDh + DOh + TFh);
-      a2 = ax2 + (ax2c + DFd + TFd);
+      a1 = ax1 + (ax1c + PDh + DOh + TFh + COSh);
+      a2 = ax2 + (ax2c + DFd + TFd + COSd);
     }
   }
 
   // finally, apply the index offsets
-  a1 = a1 - model.ax1Cor;
-  a2 = a2 - model.ax2Cor*-p;
+  ax1 = a1 - model.ax1Cor;
+  ax2 = a2 - model.ax2Cor*-p;
 
-  if (mountType == ALTAZM) { coord->z = a1; coord->a = a2; } else {
-  if (mountType == ALTALT) { coord->z = a1; coord->a = a2; } else { coord->h = a1; coord->d = a2; }
+  if (mountType == ALTAZM) { coord->z = ax1; coord->a = ax2; } else {
+  if (mountType == ALTALT) { coord->aa1 = ax1; coord->aa2 = ax2; } else { coord->h = ax1; coord->d = ax2; }
 }
 
 void GeoAlign::mountToObservedPlace(Coordinate *coord) {
@@ -487,13 +505,18 @@ void GeoAlign::mountToObservedPlace(Coordinate *coord) {
     float TFh = model.tfCor*(cosLat*sinAx1*(1.0F/cosAx2));
     float TFd = model.tfCor*(cosLat*cosAx1*sinAx2 - sinLat*cosAx2);
 
-    // ------------------------------------------------------------
-    // polar misalignment
-    float a1 = -model.azmCor*cosAx1*(sinAx2/cosAx2) + model.altCor*sinAx1*(sinAx2/cosAx2);
-    float a2 = +model.azmCor*sinAx1                 + model.altCor*cosAx1;
+    // cos() linearization for main drive mechanism runout etc.
+    float COSh = cos(ax1 + model.hcp)*model.hca*p;
+    float iax2 = ax2;
+    if (p < 0.0F) iax2 = sinLat >= 0.0F ? Deg180 - ax2 : -Deg180 - ax2;
+    float COSd = cos(iax2 + model.dcp)*model.dca*p;
 
-    ax1 = ax1 - (a1 + PDh + DOh + TFh);
-    ax2 = ax2 - (a2 + DFd + TFd);
+    // polar misalignment
+    float ax1c = -model.azmCor*cosAx1*(sinAx2/cosAx2) + model.altCor*sinAx1*(sinAx2/cosAx2);
+    float ax2c = +model.azmCor*sinAx1                 + model.altCor*cosAx1;
+
+    ax1 = ax1 - (ax1c + PDh + DOh + TFh + COSh);
+    ax2 = ax2 - (ax2c + DFd + TFd + COSd);
   }
 
   if (ax2 >  Deg90) ax2 =  Deg90;

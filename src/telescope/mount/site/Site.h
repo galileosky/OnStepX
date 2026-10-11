@@ -9,13 +9,11 @@
 #include "../../../lib/convert/Convert.h"
 #include "../../../libApp/commands/ProcessCmds.h"
 #include "../../../lib/calendars/Calendars.h"
-#include "../../../lib/tls/ds3231/DS3231.h"
-#include "../../../lib/tls/ds3234/DS3234.h"
-#include "../../../lib/tls/gps/GPS.h"
-#include "../../../lib/tls/ntp/NTP.h"
-#include "../../../lib/tls/sd3031/SD3031.h"
-#include "../../../lib/tls/teensy/Teensy.h"
-#include "../../../lib/tls/PPS.h"
+#include "../../../lib/tls/Tls.h"
+
+#ifndef SITE_MIN_PPS_SUB_MICRO
+  #define SITE_MIN_PPS_SUB_MICRO 4
+#endif
 
 extern volatile unsigned long fracLAST;
 
@@ -34,9 +32,9 @@ typedef struct LocationExtras {
 #pragma pack(1)
 #define LocationSize 40
 typedef struct Location {
-  double latitude;
-  double longitude;
-  float  elevation;
+  double latitude;  // in radians
+  double longitude; // in radians
+  float  elevation; // in meters
   float  timezone;
   char   name[16];
 } Location;
@@ -46,7 +44,7 @@ class Site {
   public:
     void init();
     
-    bool command(char *reply, char *command, char *parameter, bool *supressFrame, bool *numericReply, CommandError *commandError);
+    bool command(char *reply, char *command, char *parameter, bool *suppressFrame, bool *numericReply, CommandError *commandError);
 
     // update/apply the site latitude and longitude, necessary for LAST calculations etc.
     void updateLocation();
@@ -78,9 +76,6 @@ class Site {
     // gets sidereal ratio
     // slower rates are < 1.0, faster rates are > 1.0
     inline float getSiderealRatio() { return (float)SIDEREAL_PERIOD/siderealPeriod; }
-
-    // callback to tick the fracsec sidereal frac
-    void tick();
 
     Location location;
     LocationExtras locationEx;
@@ -153,6 +148,9 @@ class Site {
 
     // site number 0..3
     uint8_t locationNumber = 0;
+
+    // site nv keys
+    uint16_t nvKey[4];
 };
 
 extern Site site;
